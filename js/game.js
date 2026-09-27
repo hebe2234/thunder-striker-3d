@@ -84,6 +84,8 @@ export class Game {
     this.gameSpeed = 1;
     this.difficulty = { hp: 1, fireRate: 1, playerDmg: 1, dmgTaken: 1, score: 1 };
     this.scrollSpeed = 13;
+    this.routeDist = 0;   // 彎曲路線累積捲動距離（世界單位）
+    this._routeDX = 0;    // 本幀路線橫向位移
     this.attractT = 0;
     this._ray = new THREE.Raycaster();
     this._plane = new THREE.Plane(new V3(0, 1, 0), -2.4);
@@ -122,6 +124,7 @@ export class Game {
   setStage(i, first) {
     this.stageIdx = i;
     this.stage = STAGES[i];
+    this.routeDist = 0; this._routeDX = 0; // 換關路線重來
     if (this.ground) { this.scene.remove(this.ground); this.ground.geometry.dispose(); this.ground.material.map.dispose(); this.ground.material.dispose(); }
     this.groundTex = groundTexture(this.stage.theme);
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 220),
@@ -407,6 +410,7 @@ export class Game {
   // ---------- 生成 ----------
   spawnEnemy(kind, x, z, opts) {
     if (this.enemies.length > 80) return null;
+    x += this.routeX(this.routeDist) * 0.5; // 波次跟著路線走
     const e = new Enemy(this, kind, x, z, opts);
     this.enemies.push(e); return e;
   }
@@ -567,7 +571,16 @@ export class Game {
     this.shake.update(dt);
     this._updateCamera(dt);
     // 地面捲動（標題也捲；遊戲速度隨難度）
-    if (this.state !== 'paused' && this.groundTex) this.groundTex.offset.y -= (this.scrollSpeed * this.gameSpeed * dt) / 22;
+    if (this.state !== 'paused' && this.groundTex) {
+      const sd = this.scrollSpeed * this.gameSpeed * dt;
+      this.groundTex.offset.y -= sd / 22;
+      // 彎曲路線：地面貼圖橫向跟著路線走
+      const rx0 = this.routeX(this.routeDist);
+      this.routeDist += sd;
+      const rx1 = this.routeX(this.routeDist);
+      this.groundTex.offset.x = -rx1 / 22;
+      this._routeDX = rx1 - rx0;
+    }
     this.renderer.render(this.scene, this.camera);
   }
   _attract(dt) {
@@ -582,9 +595,16 @@ export class Game {
     this._scrollWorld(dt);
     this.camera.position.x = Math.sin(performance.now() * 0.0001) * 3;
   }
+  // 彎曲路線：捲動距離 -> 橫向偏移（世界單位），每關不同彎法
+  routeX(d) {
+    const r = this.stage && this.stage.route;
+    if (!r) return 0;
+    return r[0] * Math.sin(d * r[1] + r[2]) + r[3] * Math.sin(d * r[4] + r[5]);
+  }
   _scrollWorld(dt) {
-    for (const p of this.props) { p.position.z += this.scrollSpeed * dt; if (p.position.z > 16) { this.scene.remove(p); disposeGroup(p); this.props.splice(this.props.indexOf(p), 1); this.props.push(this._newProp(false)); } }
-    for (const c of this.clouds) { c.position.z += this.scrollSpeed * 0.55 * dt; if (c.position.z > 20) this._resetCloud(c, false); }
+    const rdx = this._routeDX || 0; // 路線橫向位移：建築跟著彎
+    for (const p of this.props) { p.position.z += this.scrollSpeed * dt; p.position.x += rdx; if (p.position.z > 16) { this.scene.remove(p); disposeGroup(p); this.props.splice(this.props.indexOf(p), 1); this.props.push(this._newProp(false)); } }
+    for (const c of this.clouds) { c.position.z += this.scrollSpeed * 0.55 * dt; c.position.x += rdx * 0.55; if (c.position.z > 20) this._resetCloud(c, false); }
   }
   _updateCamera(dt) {
     this.camera.position.set(
@@ -878,6 +898,7 @@ function vee(g, kind, n, cx, z) { for (let i = 0; i < n; i++) { const k = i - (n
 const STAGES = [
   {
     name: 'STAGE 1 · 黃昏都市', theme: 'city', sky: 0x241a38,
+    route: [7, 0.009, 0, 3, 0.023, 1.7], // 彎曲路線：[A1,f1,p1,A2,f2,p2]
     bannerBig: 'STAGE 1', bannerSub: '黃昏都市 — 作戰開始', clearText: '黃昏都市制壓！',
     waves(g) {
       return [
@@ -902,6 +923,7 @@ const STAGES = [
   },
   {
     name: 'STAGE 2 · 沙漠風暴', theme: 'desert', sky: 0x8fb8d8,
+    route: [10, 0.010, 0.5, 4, 0.023, 2.9],
     bannerBig: 'STAGE 2', bannerSub: '沙漠風暴 — 敵軍增援', clearText: '沙漠空域確保！',
     waves(g) {
       return [
@@ -926,6 +948,7 @@ const STAGES = [
   },
   {
     name: 'STAGE 3 · 午夜要塞', theme: 'night', sky: 0x04060f,
+    route: [6, 0.014, 2.0, 3.5, 0.031, 0.6],
     bannerBig: 'FINAL STAGE', bannerSub: '午夜要塞 — 決戰', clearText: '',
     waves(g) {
       return [
