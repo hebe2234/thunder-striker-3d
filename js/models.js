@@ -66,6 +66,12 @@ export function makePlayer() {
   }
   const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.95, 0.8), red);
   fin.position.set(0, 0.6, 1.2); fin.rotation.x = 0.25; g.add(fin);
+  // 翼下機炮（火神側炮 / 雷射側束的發射器）
+  for (const s of [-1, 1]) {
+    const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 1.25, 6), dark);
+    gun.rotation.x = Math.PI / 2; gun.position.set(s * 1.35, -0.16, -0.35); g.add(gun);
+    const tip = glowSprite(0x88ddff, 0.6); tip.position.set(s * 1.35, -0.16, -1.02); g.add(tip);
+  }
   // 引擎
   const engGlows = [];
   for (const s of [-1, 1]) {
@@ -77,6 +83,25 @@ export function makePlayer() {
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
   return { group: g, engGlows };
 }
+
+// 僚機（玩家技能召喚的小型無人機）
+export function makeDrone() {
+  const g = new THREE.Group();
+  const hull = M(0x3fa9f5), dark = M(0x1c4e80);
+  const body = new THREE.Mesh(new THREE.OctahedronGeometry(0.42), hull);
+  body.scale.set(1, 0.55, 1.5); g.add(body);
+  const eye = glowSprite(0x9fe8ff, 0.9); eye.position.set(0, 0.15, -0.3); g.add(eye);
+  for (const s of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.4), dark);
+    w.position.set(s * 0.5, 0, 0.15); g.add(w);
+  }
+  const gl = glowSprite(0x66ccff, 0.8); gl.position.set(0, 0, 0.6); g.add(gl);
+  g.traverse(o => { if (o.isMesh) o.castShadow = false; });
+  return { group: g };
+}
+
+// 機翼機炮的 X 座標（武器發射器對齊用）
+export const PLAYER_GUN_X = 1.35;
 
 // ================= 敵機 =================
 export function makeScout() {

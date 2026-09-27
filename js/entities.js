@@ -140,12 +140,12 @@ export class Enemy {
     g.shake.add(big ? 0.35 : 0.12);
     g.addScore(this.score, this.x, this.z);
     g.chainHit();
-    // 掉落
+    g.onKill(this);
+    // 掉落（武器/飛彈改由技能選擇取得，不再掉球）
     const roll = Math.random();
-    if (this.kind === 'carrier') g.dropItem(this.x, this.z, g.nextWeaponDrop());
+    if (this.kind === 'carrier') g.dropItem(this.x, this.z, 'bomb');
     else if (this.kind === 'gunship' && roll < 0.5) g.dropItem(this.x, this.z, g.randomDrop());
     else if (roll < 0.07) g.dropItem(this.x, this.z, 'medal');
-    else if (this.kind === 'ace' && roll < 0.16) g.dropItem(this.x, this.z, 'power');
     this.remove();
   }
   remove(silent) { this.dead = true; this.game.scene.remove(this.mesh); if (this.shadow) this.game.scene.remove(this.shadow); disposeGroup(this.mesh); }
@@ -189,7 +189,8 @@ export class Item {
     this.y = 2.2 + Math.sin(this.t * 3) * 0.35;
     this.mesh.material.rotation += dt * 1.5;
     const dx = p.x - this.x, dz = p.z - this.z, d = Math.hypot(dx, dz);
-    if (p.alive && d < 7) { const sp = 26; this.x += dx / d * sp * dt; this.z += dz / d * sp * dt; }
+    const magnetR = 7 + g.magnetLvl * 7;
+    if (p.alive && d < magnetR) { const sp = 26 + g.magnetLvl * 10; this.x += dx / d * sp * dt; this.z += dz / d * sp * dt; }
     if (p.alive && d < 1.7) { this.collect(); return; }
     if (this.z > 13) this.remove();
     this.mesh.position.set(this.x, this.y, this.z);
@@ -283,7 +284,7 @@ export class Midboss {
       g.scene.remove(this.mesh); g.scene.remove(this.shadow); disposeGroup(this.mesh);
       g.addScore(this.tier === 1 ? 10000 : 15000, this.x, this.z);
       // 掉落雨
-      const drops = ['power', 'power', 'bomb', g.nextWeaponDrop(), 'medal', 'medal'];
+      const drops = ['bomb', 'bomb', 'medal', 'medal', 'medal', 'medal'];
       drops.forEach((k, i) => setTimeout(() => g.dropItem(this.x + (Math.random() - .5) * 8, this.z + (Math.random() - .5) * 6, k), i * 120));
       g.onBossDown();
     }, 1700);
@@ -347,7 +348,7 @@ export class FinalBoss {
       this.sweepX += this.sweepDir * dt * 14;
       const lx = this.x + this.sweepX;
       g.particles.trail(lx, 1.2, p.z - 6, 0xff2266, 1.4, 0.25, 0.4); // 預警
-      if (this.sweepT <= 1.2 && Math.abs(p.x - lx) < 1.1 && p.invuln <= 0 && p.alive) g.killPlayer();
+      if (this.sweepT <= 1.2 && Math.abs(p.x - lx) < 1.1 && p.invuln <= 0 && p.alive) g.hurtPlayer(30);
       if (this.sweepT <= 0) g.particles.explosion(lx, 1, p.z - 6, 1.2, [0xff2266, 0xff88aa]);
     }
     this.mesh.position.set(this.x, this.y + Math.sin(this.t * 1.2) * 0.2, this.z);

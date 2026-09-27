@@ -98,6 +98,9 @@
   .wcard.red h4 { color:#ff8a8a; } .wcard.red { border-color:#ff5e5e55; }
   .wcard.blue h4 { color:#8ef3ff; }
   .wcard.purple h4 { color:#d49aff; } .wcard.purple { border-color:#b45eff55; }
+  .wcard.green h4 { color:#8affa8; } .wcard.green { border-color:#7dff9e55; }
+  .wcard.orange h4 { color:#ffcf9e; } .wcard.orange { border-color:#ffb06655; }
+  .wcard.yellow h4 { color:#fff49e; } .wcard.yellow { border-color:#fff06655; }
   .howto { margin-top:14px; font-size:12px; color:#7f8db3; line-height:2; letter-spacing:1px; }
   .howto b { color:#cfe0ff; }
   .big-result { font-size:clamp(40px,9vw,72px); font-weight:900; letter-spacing:10px; margin-bottom:10px; }
@@ -106,6 +109,37 @@
   .final-score { font-size:15px; letter-spacing:2px; color:#dfe9ff; margin:6px 0 18px; }
   .final-score b { color:#ffd75e; font-size:24px; }
   #errlog { display:none; }
+  /* ---------- HP ---------- */
+  #hp-wrap { display:flex; align-items:center; gap:6px; margin-top:7px; }
+  #hp-label { font-size:10px; color:#ff8e8e; font-weight:700; letter-spacing:1px; }
+  #hp-bar { flex:1; height:9px; border-radius:5px; background:#2a0d12; border:1px solid #ff5e5e55; overflow:hidden; min-width:70px; }
+  #hp-fill { height:100%; width:100%; border-radius:4px; background:linear-gradient(90deg,#37e08b,#a8ff7a); transition:width .2s; }
+  #hp-num { font-size:11px; color:#ffd7d7; min-width:26px; text-align:right; }
+  /* ---------- 技能選擇 ---------- */
+  #choice-screen { background:rgba(4,8,18,.72); backdrop-filter:blur(3px); z-index:30; }
+  .choice-title { font-size:clamp(26px,6vw,42px); font-weight:900; letter-spacing:6px; color:#ffe97a; text-shadow:0 0 24px #ffb52e; }
+  .choice-title span { font-size:14px; color:#9fb3dd; letter-spacing:2px; display:block; margin-top:6px; font-weight:400; }
+  .choice-sub { color:#9fb3dd; font-size:13px; letter-spacing:3px; margin:10px 0 22px; }
+  .choice-cards { display:flex; gap:14px; padding:0 16px; max-width:760px; width:100%; justify-content:center; }
+  .choice-card { flex:1; max-width:230px; background:linear-gradient(160deg,#141d33,#0a0f20); border:2px solid #3d5a9e;
+    border-radius:14px; padding:20px 14px 18px; color:#eaf1ff; cursor:pointer; text-align:center;
+    transition:transform .12s, border-color .12s, box-shadow .12s; font-family:inherit; }
+  .choice-card:hover { transform:translateY(-4px) scale(1.03); border-color:#ffe97a; box-shadow:0 0 24px #ffb52e66; }
+  .choice-card:active { transform:scale(.97); }
+  .ctag { display:inline-block; font-size:10px; letter-spacing:2px; padding:3px 10px; border-radius:20px; margin-bottom:10px; }
+  .ctag.tw { background:#ff5e5e33; color:#ff9e9e; border:1px solid #ff5e5e88; }
+  .ctag.tm { background:#ffb06633; color:#ffcf9e; border:1px solid #ffb06688; }
+  .ctag.tu { background:#29c7ff33; color:#9ee8ff; border:1px solid #29c7ff88; }
+  .ctag.tb { background:#ffe97a33; color:#ffe97a; border:1px solid #ffe97a88; }
+  .cicon { font-size:42px; margin:4px 0 8px; }
+  .cname { font-size:15px; font-weight:700; letter-spacing:1px; margin-bottom:8px; }
+  .cdesc { font-size:12px; color:#9fb3dd; line-height:1.7; }
+  @media (max-width:640px){
+    .choice-cards { flex-direction:column; align-items:center; gap:10px; }
+    .choice-card { max-width:320px; width:100%; padding:12px; display:grid; grid-template-columns:auto 1fr; grid-template-areas:"tag tag" "icon name" "icon desc"; column-gap:12px; text-align:left; }
+    .ctag { grid-area:tag; justify-self:start; } .cicon { grid-area:icon; font-size:34px; margin:0; }
+    .cname { grid-area:name; margin:0; align-self:end; } .cdesc { grid-area:desc; }
+  }
   @media (max-width:640px){
     .weapons-show { display:none; }
     #weapon-panel { min-width:118px; padding:6px 8px; }
@@ -128,6 +162,7 @@
         <div id="weapon-name">火神炮 VULCAN</div>
         <div id="weapon-pips"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <div id="missile-name">追蹤飛彈 HOMING</div>
+        <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div><span id="hp-num">100</span></div>
       </div>
     </div>
   </div>
@@ -153,10 +188,14 @@
     <div class="wcard red"><h4>🔴 火神散射炮 VULCAN</h4><p>經典紅色武器。滿級 7 向扇形彈幕＋雙側炮，火力覆蓋全螢幕，雜魚殺手。</p></div>
     <div class="wcard blue"><h4>🔵 雷射光束 LASER</h4><p>藍色武器。超高貫穿傷害的持續光束，滿級三束齊發，BOSS 剋星。</p></div>
     <div class="wcard purple"><h4>🟣 電漿爆裂彈 PLASMA</h4><p>紫色武器。緩慢重型電漿球，命中引發範圍爆炸，清場神器。</p></div>
+    <div class="wcard green"><h4>🟢 電磁軌道炮 RAILGUN</h4><p>綠色武器。超重型貫穿彈從雙翼機炮射出，單發毀滅傷害，射速慢。</p></div>
+    <div class="wcard orange"><h4>🟠 火箭彈幕 ROCKETS</h4><p>橙色武器。連射小型火箭，命中引發小範圍爆炸，壓制力強。</p></div>
+    <div class="wcard yellow"><h4>⚡ 特斯拉電弧 TESLA</h4><p>黃色武器。發射電弧球，閃電鏈傳導多個敵人，群體殺手。</p></div>
   </div>
   <div class="howto">
     <b>操作：</b>滑鼠 / 手指拖曳移動 · 自動開火 · <b>空白鍵 / X</b> 炸彈 · <b>P</b> 暫停 · <b>M</b> 靜音<br>
-    吃到 <b>R / B / P</b> 切換武器，<b>M / H</b> 飛彈，<b>Ⓟ</b> 升級火力，<b>💣</b> 補炸彈
+    每擊墜 <b>12</b> 架敵機可從 <b>技能樹三選一</b>：解鎖新武器 / 換飛彈 / 傷害・射速・護盾・僚機等強化<br>
+    戰機有 <b>HP</b>，脫戰 4 秒後緩慢回復 · 吃 <b>💣</b> 補炸彈 · <b>🏅</b> 加分
   </div>
 </div>
 
@@ -182,6 +221,16 @@
 <div class="overlay hidden" id="stageclear-screen">
   <div class="big-result" style="color:#8ef3ff;text-shadow:0 0 20px #29c7ff;">STAGE CLEAR</div>
   <div class="final-score" id="stageclear-sub">前往下一關</div>
+</div>
+
+<div class="overlay hidden" id="choice-screen">
+  <div class="choice-title">⚡ 技能選擇 <span>擊墜 12 架的獎勵</span></div>
+  <div class="choice-sub">選擇一項強化你的戰機</div>
+  <div class="choice-cards">
+    <button class="choice-card" id="choice-0"></button>
+    <button class="choice-card" id="choice-1"></button>
+    <button class="choice-card" id="choice-2"></button>
+  </div>
 </div>
 
 <div id="errlog"></div>

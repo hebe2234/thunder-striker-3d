@@ -1,10 +1,10 @@
 // 遊戲主邏輯：場景 / 關卡 / 碰撞 / 生成器 / 狀態機
 import * as THREE from 'three';
 import { AudioSys } from './audio.js';
-import { WeaponSystem, WEAPON_INFO } from './weapons.js';
+import { WeaponSystem, WEAPON_INFO, SKILL_DEFS, buildChoices } from './weapons.js';
 import { Enemy, Midboss, FinalBoss, Item, spawnEnemyHomingMissile, disposeGroup } from './entities.js';
 import { Particles, Rings, Shake } from './particles.js';
-import { makePlayer, groundTexture, makeGroundProp, makeCloud, glowSprite, blobShadow, MB } from './models.js';
+import { makePlayer, makeDrone, groundTexture, makeGroundProp, makeCloud, glowSprite, blobShadow, MB } from './models.js';
 
 const V3 = THREE.Vector3;
 const clamp = THREE.MathUtils.clamp;
@@ -48,7 +48,16 @@ export class Game {
     this.playerMesh = pb.group; this.engGlows = pb.engGlows;
     this.scene.add(this.playerMesh);
     this.playerShadow = blobShadow(3.4); this.scene.add(this.playerShadow);
-    this.player = { x: 0, y: 2.4, z: 7, vx: 0, vz: 0, alive: false, invuln: 0, lives: 3, bombs: 3, respawnT: 0 };
+    this.player = { x: 0, y: 2.4, z: 7, vx: 0, vz: 0, alive: false, invuln: 0, lives: 3, bombs: 3, maxBombs: 5, respawnT: 0,
+      hp: 100, maxHp: 100, regenT: 0 };
+    // 護盾視覺
+    this.shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(2.4, 18, 14),
+      new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.shieldMesh.visible = false; this.scene.add(this.shieldMesh);
+    // 技能樹狀態
+    this.skills = {}; this.shields = 0; this.magnetLvl = 0;
+    this.wingmen = []; this.lightnings = [];
+    this.kills = 0; this.sinceChoice = 0; this.choiceQueued = false; this._pendingAdvance = null; this._pendingVictory = false;
 
     // 實體池
     this.enemies = []; this.bullets = []; this.enemyBullets = [];
@@ -63,7 +72,6 @@ export class Game {
     this.bombWave = null; this.flashBomb = 0;
     this.difficulty = { hp: 1, fireRate: 1 };
     this.scrollSpeed = 13;
-    this.dropCycle = 0;
     this.attractT = 0;
     this._ray = new THREE.Raycaster();
     this._plane = new THREE.Plane(new V3(0, 1, 0), -2.4);
@@ -162,15 +170,23 @@ export class Game {
   startGame() {
     this.audio.init(); this.audio.stopMusic(); this.audio.startMusic(1);
     this.score = 0; this.loop = 1; this.chain = 0;
-    this.player.lives = 3; this.player.bombs = 3;
-    this.weapons.type = 'vulcan'; this.weapons.level = 1; this.weapons.missile = 'homing';
+    this.player.lives = 3; this.player.bombs = 3; this.player.maxBombs = 5;
+    this.weapons.reset();
+    // 技能樹重置
+    this.skills = {}; this.shields = 0; this.magnetLvl = 0;
+    this.kills = 0; this.sinceChoice = 0; this.choiceQueued = false; this._pendingAdvance = null; this._pendingVictory = false;
+    for (const wm of this.wingmen) { this.scene.remove(wm.mesh); disposeGroup(wm.mesh); }
+    this.wingmen = [];
+    for (const l of this.lightnings) this.scene.remove(l.line);
+    this.lightnings = [];
+    this._updateShieldMesh();
     this._applyDifficulty();
     this._clearField();
     this.setStage(0);
     this._beginStage();
     this.state = 'playing';
-    this.ui.showHud(); this.ui.hideTitle(); this.ui.syncWeapon(this.weapons);
-    this.ui.setScore(0); this.ui.setLives(3); this.ui.setBombs(3);
+    this.ui.showHud(); this.ui.hideTitle(); this.ui.hideChoice(); this.ui.syncWeapon(this.weapons);
+    this.ui.setScore(0); this.ui.setLives(3); this.ui.setBombs(3, 5);
     this._spawnPlayer(true);
   }
   _applyDifficulty() {
@@ -198,24 +214,139 @@ export class Game {
     const p = this.player;
     p.x = 0; p.z = 7; p.vx = 0; p.vz = 0; p.alive = true;
     p.invuln = fresh ? 2 : 3;
+    p.hp = p.maxHp; p.regenT = 0;
+    this.ui.setHp(p.hp, p.maxHp);
+    this._updateShieldMesh();
     this.playerMesh.visible = true;
   }
   onBossDown() {
     this.boss = null; this.bossMode = false;
     const bonus = 2000 * (this.stageIdx + 1) * this.loop;
     this.addScore(bonus, 0, -10);
-    this.player.bombs = Math.min(5, this.player.bombs + 1); this.ui.setBombs(this.player.bombs);
-    this.ui.stageClear(this.stage.clearText, () => {
-      if (this.stageIdx < 2) { this.setStage(this.stageIdx + 1); this._beginStage(); }
-    });
+    this.player.bombs = Math.min(this.player.maxBombs, this.player.bombs + 1); this.ui.setBombs(this.player.bombs, this.player.maxBombs);
+    const advance = () => { if (this.stageIdx < 2) { this.setStage(this.stageIdx + 1); this._beginStage(); } };
+    if (this.choiceQueued) {
+      // 有排隊的選擇：等 STAGE CLEAR 橫幅播完再開選擇，選完才進下一關
+      this.choiceQueued = false;
+      this.ui.stageClear(this.stage.clearText, () => { this._pendingAdvance = advance; this.openChoice(); });
+    } else {
+      this.ui.stageClear(this.stage.clearText, advance);
+    }
+  }
+  // ---------- 技能樹 ----------
+  onKill() {
+    this.kills++; this.sinceChoice++;
+    if (this.sinceChoice >= 12 && this.state === 'playing') {
+      if (this.bossMode) this.choiceQueued = true;
+      else this.openChoice();
+    }
+  }
+  openChoice() {
+    const opts = buildChoices(this);
+    this.state = 'choosing';
+    this.weapons.clearBeams();
+    this.ui.showChoice(opts, id => this.applyChoice(id));
+    this.audio.powerup();
+  }
+  applyChoice(id) {
+    const def = SKILL_DEFS.find(d => d.id === id) || { id: 'u_score', kind: 'bonus' };
+    const w = this.weapons;
+    this.skills[id] = (this.skills[id] || 0) + 1;
+    if (def.kind === 'weapon') {
+      w.setWeapon(def.wid);
+      this.ui.banner(WEAPON_INFO[def.wid].name, '武器切換！', 1.4);
+    } else if (def.kind === 'missile') {
+      w.setMissile(def.mid);
+      this.ui.banner(def.name, def.desc, 1.4);
+    } else if (id === 'u_level') w.addLevel();
+    else if (id === 'u_dmg') w.dmgMul *= 1.2;
+    else if (id === 'u_rate') w.rateMul *= 1.12;
+    else if (id === 'u_crit') w.crit += 0.10;
+    else if (id === 'u_shield') { this.shields = Math.min(3, this.shields + 1); this._updateShieldMesh(); }
+    else if (id === 'u_wing') this.addWingman();
+    else if (id === 'u_magnet') this.magnetLvl++;
+    else if (id === 'u_bomb') { this.player.maxBombs = Math.min(7, this.player.maxBombs + 1); this.player.bombs = this.player.maxBombs; this.ui.setBombs(this.player.bombs, this.player.maxBombs); }
+    else if (id === 'u_life') { this.player.lives = Math.min(5, this.player.lives + 1); this.ui.setLives(this.player.lives); this.player.hp = this.player.maxHp; }
+    else if (id === 'u_score') this.addScore(5000, this.player.x, this.player.z);
+    // 每次選擇都回復部分血量
+    this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
+    this.player.regenT = 0;
+    this.ui.setHp(this.player.hp, this.player.maxHp);
+    this.audio.powerup();
+    this.ui.syncWeapon(w);
+    this.ui.hideChoice();
+    this.sinceChoice = 0;
+    this.state = 'playing';
+    // 選擇後待辦：進下一關 / 顯示勝利
+    if (this._pendingAdvance) { const f = this._pendingAdvance; this._pendingAdvance = null; f(); }
+    else if (this._pendingVictory) {
+      this._pendingVictory = false;
+      this.state = 'victory'; this.ui.showVictory(this.score); this.audio.stopMusic();
+      if (this.score > this.hi) { this.hi = this.score; localStorage.setItem('ts3d_hi', this.hi); }
+    }
+  }
+  _updateShieldMesh() {
+    this.shieldMesh.visible = this.shields > 0 && this.player.alive;
+  }
+  addWingman() {
+    if (this.wingmen.length >= 2) return;
+    const d = makeDrone();
+    this.scene.add(d.group);
+    this.wingmen.push({ mesh: d.group, side: this.wingmen.length === 0 ? -1 : 1, cd: Math.random() * 0.3 });
+  }
+  _updateWingmen(dt) {
+    const p = this.player;
+    for (const wm of this.wingmen) {
+      const tx = p.x + wm.side * 2.8, tz = p.z + 1.4;
+      wm.mesh.position.x += (tx - wm.mesh.position.x) * Math.min(1, dt * 6);
+      wm.mesh.position.z += (tz - wm.mesh.position.z) * Math.min(1, dt * 6);
+      wm.mesh.position.y = p.y + Math.sin(performance.now() * 0.004 + wm.side) * 0.15;
+      wm.mesh.rotation.y = Math.sin(performance.now() * 0.002) * 0.1;
+      if (!p.alive) continue;
+      wm.cd -= dt;
+      if (wm.cd <= 0) {
+        wm.cd = 0.34 / this.weapons.rateMul;
+        this.spawnBullet({ x: wm.mesh.position.x, y: wm.mesh.position.y, z: wm.mesh.position.z - 1,
+          vx: 0, vz: -55, dmg: (1.5 + this.weapons.level * 0.2) * this.weapons.dmgMul, r: 0.45, color: 0x9fe8ff });
+      }
+    }
+  }
+  spawnLightning(x1, y1, z1, x2, y2, z2, color = 0xffee55) {
+    const pts = [];
+    const n = 7;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const jx = (Math.random() - .5) * 1.6 * (i > 0 && i < n ? 1 : 0);
+      pts.push(new THREE.Vector3(x1 + (x2 - x1) * t + jx, y1 + (y2 - y1) * t, z1 + (z2 - z1) * t + (Math.random() - .5) * 1.6 * (i > 0 && i < n ? 1 : 0)));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.scene.add(line);
+    this.lightnings.push({ line, life: 0.22 });
+  }
+  _updateLightning(dt) {
+    for (const l of this.lightnings) {
+      l.life -= dt;
+      l.line.material.opacity = Math.max(0, l.life / 0.22);
+      if (l.life <= 0) { this.scene.remove(l.line); l.line.geometry.dispose(); l.line.material.dispose(); }
+    }
+    this.lightnings = this.lightnings.filter(l => l.life > 0);
   }
   onFinalBossDown() {
     this.boss = null; this.bossMode = false;
     this.addScore(20000 * this.loop, 0, -10);
-    this.state = 'victory';
-    this.ui.showVictory(this.score);
-    this.audio.stopMusic();
-    if (this.score > this.hi) { this.hi = this.score; localStorage.setItem('ts3d_hi', this.hi); }
+    const showVic = () => {
+      this.state = 'victory';
+      this.ui.showVictory(this.score);
+      this.audio.stopMusic();
+      if (this.score > this.hi) { this.hi = this.score; localStorage.setItem('ts3d_hi', this.hi); }
+    };
+    if (this.choiceQueued) {
+      // 尾王戰中排隊的選擇：先選完再顯示勝利
+      this.choiceQueued = false;
+      this._pendingVictory = true;
+      this.openChoice();
+    } else showVic();
   }
   nextLoop() {
     this.loop++; this._applyDifficulty();
@@ -261,25 +392,28 @@ export class Game {
   }
   spawnBullet(o) {
     const b = this._getBullet();
-    Object.assign(b, { x: o.x, y: o.y, z: o.z, vx: o.vx, vz: o.vz, dmg: o.dmg, r: o.r || 0.5, dead: false, life: 2.2 });
+    Object.assign(b, { x: o.x, y: o.y, z: o.z, vx: o.vx, vz: o.vz, dmg: o.dmg, r: o.r || 0.5, dead: false, life: 2.2, pierce: !!o.pierce, _hitSet: null });
     b.mesh.material.color.set(o.color || 0x9fe8ff);
+    b.mesh.children[0].material.color.set(o.color || 0x66ccff);
+    const s = o.scale || 1;
+    b.mesh.scale.set(s, s, o.scale ? s * 1.4 : 1);
     b.mesh.position.set(o.x, o.y, o.z);
     b.mesh.rotation.y = Math.atan2(o.vx, -o.vz);
     this.bullets.push(b);
   }
   spawnPlasma(o) {
     const mesh = new THREE.Group();
-    const core = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), MB(0xd9a8ff));
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), MB(o.tint || 0xd9a8ff));
     mesh.add(core);
-    const halo = glowSprite(0xb45eff, 3.2); mesh.add(halo);
+    const halo = glowSprite(o.haloTint || 0xb45eff, o.tesla ? 4.2 : 3.2); mesh.add(halo);
     mesh.position.set(o.x, o.y, o.z); this.scene.add(mesh);
-    this.plasmas.push(Object.assign({ mesh, dead: false, life: 2.4, r: 0.9 }, o));
+    this.plasmas.push(Object.assign({ mesh, dead: false, life: 2.4, r: 0.9, tesla: false, chains: 0 }, o));
   }
   spawnMissile(o) {
     const mesh = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 1.1, 6), MB(0xffe9a8));
     body.rotation.x = Math.PI / 2; mesh.add(body);
-    const halo = glowSprite(o.homing ? 0x7bff9e : 0xff9d2e, 1.2); mesh.add(halo);
+    const halo = glowSprite(o.cluster ? 0xffe066 : o.rocket ? 0xffb066 : o.homing ? 0x7bff9e : 0xff9d2e, 1.2); mesh.add(halo);
     mesh.position.set(o.x, o.y, o.z); this.scene.add(mesh);
     this.missiles.push(Object.assign({ mesh, dead: false, life: 4, r: 0.6, t: 0, tx: 0, tz: 0 }, o));
   }
@@ -301,24 +435,18 @@ export class Game {
     this.enemyBullets.push(b);
   }
   dropItem(x, z, kind) { if (this.items.length < 24) this.items.push(new Item(this, kind, x, z)); }
-  nextWeaponDrop() { const c = ['vulcan', 'laser', 'plasma']; return c[(this.dropCycle++) % 3]; }
   randomDrop() {
-    const t = ['power', 'power', 'bomb', 'missile_h', 'missile_n', 'medal', 'power'];
+    // 武器/飛彈改由技能選擇取得；只掉炸彈、勳章、稀有 1UP
+    const t = ['bomb', 'medal', 'medal', 'medal', 'bomb', 'medal', 'oneup'];
     return t[(Math.random() * t.length) | 0];
   }
   collectItem(kind, x, z) {
-    const w = this.weapons, ui = this.ui;
+    const ui = this.ui;
     this.particles.spark(x, 2.2, z, 0xffffff, 10, 8);
     this.rings.spawn(x, 1.4, z, 0xffffff, 3, 0.4);
-    if (kind === 'vulcan' || kind === 'laser' || kind === 'plasma') {
-      w.setWeapon(kind); this.audio.powerup(); ui.banner(WEAPON_INFO[kind].name, '武器切換！', 1.2);
-    } else if (kind === 'missile_h') { w.setMissile('homing'); this.audio.powerup(); ui.banner('追蹤飛彈', '自動鎖定敵機', 1.2); }
-    else if (kind === 'missile_n') { w.setMissile('napalm'); this.audio.powerup(); ui.banner('燃燒飛彈', '範圍燃燒傷害', 1.2); }
-    else if (kind === 'power') { w.addLevel(); this.audio.powerup(); this.shake.add(0.1); }
-    else if (kind === 'bomb') { this.player.bombs = Math.min(5, this.player.bombs + 1); this.audio.pickup(); ui.setBombs(this.player.bombs); }
+    if (kind === 'bomb') { this.player.bombs = Math.min(this.player.maxBombs, this.player.bombs + 1); this.audio.pickup(); ui.setBombs(this.player.bombs, this.player.maxBombs); }
     else if (kind === 'medal') { this.addScore(Math.round(500 * (1 + Math.min(this.chain, 50) * 0.04)), x, z); this.audio.pickup(); }
     else if (kind === 'oneup') { this.player.lives = Math.min(5, this.player.lives + 1); this.audio.oneUp(); ui.setLives(this.player.lives); ui.banner('1UP', '戰機增加！', 1.4); }
-    ui.syncWeapon(w);
   }
 
   // ---------- 計分 / 連擊 ----------
@@ -357,10 +485,29 @@ export class Game {
     p.bombs--; this.ui.setBombs(p.bombs);
     this.weapons.bomb(this);
   }
+  // 玩家受傷（血量制；護盾優先抵擋）
+  hurtPlayer(dmg) {
+    const p = this.player;
+    if (!p.alive || p.invuln > 0) return;
+    if (this.shields > 0) {
+      this.shields--; this._updateShieldMesh();
+      p.invuln = Math.max(p.invuln, 1.2);
+      this.particles.spark(p.x, p.y, p.z, 0x66ccff, 18, 11);
+      this.rings.spawn(p.x, p.y - 1, p.z, 0x66ccff, 5, 0.5);
+      this.audio.pickup();
+      return;
+    }
+    p.hp -= dmg; p.regenT = 4;
+    this.ui.setHp(p.hp, p.maxHp);
+    this.ui.damageFlash(); this.shake.add(0.28);
+    this.audio.hit();
+    if (p.hp <= 0) { p.hp = 0; this.ui.setHp(0, p.maxHp); this.killPlayer(); }
+  }
   killPlayer() {
     const p = this.player;
     if (!p.alive || p.invuln > 0) return;
     p.alive = false; this.playerMesh.visible = false;
+    this.shieldMesh.visible = false;
     this.particles.explosion(p.x, p.y, p.z, 2.4);
     this.rings.spawn(p.x, 1, p.z, 0x66ccff, 10, 0.8);
     this.audio.playerDown(); this.shake.add(0.8);
@@ -378,9 +525,9 @@ export class Game {
     const dt = Math.min(0.05, this.clock.getDelta());
     if (this.state === 'playing') this.update(dt);
     else if (this.state === 'title') this._attract(dt);
-    // 暫停時仍更新粒子一點點？不，完全凍結比較乾脆
-    this.particles.update(this.state === 'paused' ? 0 : dt);
-    this.rings.update(this.state === 'paused' ? 0 : dt);
+    // 'choosing' / 'paused'：凍結遊戲邏輯，只渲染
+    this.particles.update(this.state === 'paused' || this.state === 'choosing' ? 0 : dt);
+    this.rings.update(this.state === 'paused' || this.state === 'choosing' ? 0 : dt);
     this.shake.update(dt);
     this._updateCamera(dt);
     // 地面捲動（標題也捲）
@@ -427,6 +574,15 @@ export class Game {
       p.invuln = Math.max(0, p.invuln - dt);
       this.playerMesh.visible = p.invuln <= 0 || (performance.now() * 0.02 | 0) % 2 === 0;
       this.weapons.fire(dt);
+      // 脫戰回血
+      if (p.regenT > 0) p.regenT -= dt;
+      else if (p.hp < p.maxHp) { p.hp = Math.min(p.maxHp, p.hp + 7 * dt); this.ui.setHp(p.hp, p.maxHp); }
+      // 護盾跟隨
+      if (this.shields > 0) {
+        this.shieldMesh.position.set(p.x, p.y, p.z);
+        this.shieldMesh.material.opacity = 0.13 + Math.sin(performance.now() * 0.006) * 0.05;
+      }
+      this._updateWingmen(dt);
       this.engGlows.forEach((gl, i) => { const s = 1.3 + Math.random() * 0.7; gl.scale.set(s, s, 1); });
       // 引擎尾焰
       if (Math.random() < 0.6) this.particles.trail(p.x + (Math.random() - .5) * 0.6, p.y - 0.1, p.z + 1.9, 0x55bbff, 0.55, 0.3, 0.4);
@@ -448,6 +604,7 @@ export class Game {
     this._updatePlasmas(dt);
     this._updateMissiles(dt);
     this._updateBurns(dt);
+    this._updateLightning(dt);
     this._collide();
 
     // 炸彈波
@@ -508,9 +665,30 @@ export class Game {
       pl.mesh.position.set(pl.x, pl.y, pl.z);
       const s = 1 + Math.sin(performance.now() * 0.02) * 0.15;
       pl.mesh.scale.set(s, s, s);
-      if (Math.random() < 0.7) this.particles.trail(pl.x, pl.y, pl.z, 0xb45eff, 0.7, 0.35, 0.8);
-      if (pl.life <= 0 || pl.z < -65) { this._plasmaBoom(pl); pl.dead = true; }
+      if (Math.random() < 0.7) this.particles.trail(pl.x, pl.y, pl.z, pl.tesla ? 0xffee55 : 0xb45eff, 0.7, 0.35, 0.8);
+      if (pl.life <= 0 || pl.z < -65) {
+        if (pl.tesla) { this._teslaDischarge(pl); pl.dead = true; }
+        else { this._plasmaBoom(pl); pl.dead = true; }
+      }
     }
+  }
+  _teslaDischarge(pl) {
+    // 閃電鏈：從電弧球位置跳向最近的敵人，連鎖傳導
+    const targets = this.enemies.filter(e => !e.dead);
+    if (this.boss && !this.boss.dead) targets.push(this.boss);
+    targets.sort((a, b) => Math.hypot(a.x - pl.x, a.z - pl.z) - Math.hypot(b.x - pl.x, b.z - pl.z));
+    let fx = pl.x, fy = pl.y, fz = pl.z, n = 0;
+    for (const e of targets) {
+      if (n >= pl.chains) break;
+      if (Math.hypot(e.x - fx, e.z - fz) > 17) continue;
+      const ey = e.y || 2.4;
+      this.spawnLightning(fx, fy, fz, e.x, ey, e.z);
+      this.particles.spark(e.x, ey, e.z, 0xffee55, 8, 9);
+      e.hurt(pl.dmg, e.x, e.z);
+      fx = e.x; fy = ey; fz = e.z; n++;
+    }
+    this.audio.explosion(false);
+    this.scene.remove(pl.mesh); disposeGroup(pl.mesh);
   }
   _plasmaBoom(pl) {
     const g = this;
@@ -525,6 +703,16 @@ export class Game {
   _updateMissiles(dt) {
     for (const m of this.missiles) {
       m.t += dt;
+      // 分裂飛彈：升空後分裂為 3 枚追蹤彈
+      if (m.cluster && !m.split && m.t > 0.45) {
+        m.split = true;
+        for (const s of [-1, 1]) {
+          this.spawnMissile({ x: m.x + s * 0.5, y: m.y, z: m.z,
+            vx: s * 14, vz: -20, dmg: m.dmg * 0.7, homing: true });
+        }
+        m.homing = true; m.cluster = false; m.dmg *= 0.7;
+        this.particles.spark(m.x, m.y, m.z, 0xffe066, 10, 8);
+      }
       if (m.homing) {
         let best = null, bd = 46;
         for (const e of this.enemies) { const d = Math.hypot(e.x - m.x, e.z - m.z); if (d < bd && e.z < m.z + 6) { bd = d; best = e; } }
@@ -553,8 +741,8 @@ export class Game {
     }
   }
   _missileBoom(m) {
-    const aoe = m.napalm ? 3.2 : 1.9;
-    this.particles.explosion(m.x, m.y, m.z, m.napalm ? 1.3 : 0.9, m.napalm ? [0xff9d2e, 0xff5511, 0xffdd66] : [0x7bff9e, 0xfff2cc]);
+    const aoe = m.napalm ? 3.2 : m.rocket ? 1.8 : 1.9;
+    this.particles.explosion(m.x, m.y, m.z, m.napalm ? 1.3 : 0.9, m.napalm ? [0xff9d2e, 0xff5511, 0xffdd66] : m.rocket ? [0xffb066, 0xffdd66] : [0x7bff9e, 0xfff2cc]);
     if (m.napalm) { this.burns.push({ x: m.x, z: m.z, t: 3 }); this.rings.spawn(m.x, 0.4, m.z, 0xff9d2e, aoe, 0.5); }
     this.audio.explosion(false);
     const hit = e => { const d = Math.hypot(e.x - m.x, e.z - m.z); if (d < aoe + e.r) e.hurt(m.dmg * (m.napalm && !e.air ? 1.6 : 1), e.x, e.z); };
@@ -582,17 +770,32 @@ export class Game {
         if (e.dead) continue;
         const dx = e.x - b.x, dz = e.z - b.z;
         if (dx * dx + dz * dz < (e.r + b.r) * (e.r + b.r)) {
-          e.hurt(b.dmg, b.x, b.z); b.dead = true; this.audio.hit(); break;
+          e.hurt(b.dmg, b.x, b.z); this.audio.hit();
+          if (b.pierce) { b._hitSet = b._hitSet || new Set(); if (b._hitSet.has(e)) continue; b._hitSet.add(e); continue; }
+          b.dead = true; break;
         }
       }
       if (!b.dead && this.boss && !this.boss.dead) {
         const bo = this.boss, dx = bo.x - b.x, dz = bo.z - b.z;
-        if (dx * dx + dz * dz < (bo.r + b.r) * (bo.r + b.r)) { bo.hurt(b.dmg, b.x, b.z); b.dead = true; this.audio.hit(); }
+        if (dx * dx + dz * dz < (bo.r + b.r) * (bo.r + b.r)) {
+          bo.hurt(b.dmg, b.x, b.z); this.audio.hit();
+          if (!b.pierce) b.dead = true;
+        }
       }
     }
-    // 電漿 vs 敵人（穿透＋小範圍）
+    // 電漿 / 特斯拉 vs 敵人
     for (const pl of this.plasmas) {
       if (pl.dead) continue;
+      if (pl.tesla) {
+        // 電弧球碰到敵人即放電
+        let touched = false;
+        for (const e of this.enemies) {
+          if (!e.dead && Math.hypot(e.x - pl.x, e.z - pl.z) < e.r + pl.r) { touched = true; break; }
+        }
+        if (!touched && this.boss && !this.boss.dead && Math.hypot(this.boss.x - pl.x, this.boss.z - pl.z) < this.boss.r + pl.r) touched = true;
+        if (touched) { this._teslaDischarge(pl); pl.dead = true; }
+        continue;
+      }
       let hitAny = false;
       for (const e of this.enemies) {
         if (e.dead) continue;
@@ -614,7 +817,7 @@ export class Game {
         if (b.dead) continue;
         const dx = b.x - p.x, dz = b.z - p.z;
         if (dx * dx + dz * dz < (pr + b.r) * (pr + b.r) && Math.abs(b.y - p.y) < 2.4) {
-          b.dead = true; this.killPlayer(); break;
+          b.dead = true; this.hurtPlayer(22); break;
         }
       }
     }
@@ -624,7 +827,7 @@ export class Game {
       for (const e of targets) {
         if (e.dead) continue;
         const dx = e.x - p.x, dz = e.z - p.z, rr = e.r * 0.85 + pr;
-        if (dx * dx + dz * dz < rr * rr) { e.hurt(60, p.x, p.z); this.killPlayer(); break; }
+        if (dx * dx + dz * dz < rr * rr) { e.hurt(60, p.x, p.z); this.hurtPlayer(34); break; }
       }
     }
   }

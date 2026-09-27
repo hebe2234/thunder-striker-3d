@@ -1,5 +1,5 @@
-// DOM UI：HUD / 選單 / 橫幅 / 觸控按鈕
-import { WEAPON_INFO } from './weapons.js';
+// DOM UI：HUD / 選單 / 橫幅 / 觸控按鈕 / 技能選擇
+import { WEAPON_INFO, MISSILE_INFO } from './weapons.js';
 
 const $ = id => document.getElementById(id);
 
@@ -37,16 +37,23 @@ export class UI {
     const el = $('lives'); el.innerHTML = '';
     for (let i = 0; i < 5; i++) { const d = document.createElement('div'); d.className = 'ship' + (i < n ? '' : ' lost'); el.appendChild(d); }
   }
-  setBombs(n) {
+  setBombs(n, max = 5) {
     const el = $('bombs'); el.querySelectorAll('.bomb').forEach(e => e.remove());
-    for (let i = 0; i < 5; i++) { const d = document.createElement('div'); d.className = 'bomb' + (i < n ? '' : ' lost'); el.appendChild(d); }
+    for (let i = 0; i < max; i++) { const d = document.createElement('div'); d.className = 'bomb' + (i < n ? '' : ' lost'); el.appendChild(d); }
+  }
+  setHp(hp, max) {
+    const f = $('hp-fill');
+    const frac = Math.max(0, hp / max);
+    f.style.width = `${frac * 100}%`;
+    f.style.background = frac > 0.5 ? 'linear-gradient(90deg,#37e08b,#a8ff7a)' : frac > 0.25 ? 'linear-gradient(90deg,#e0a837,#ffe17a)' : 'linear-gradient(90deg,#e03737,#ff7a7a)';
+    $('hp-num').textContent = `${Math.ceil(Math.max(0, hp))}`;
   }
   syncWeapon(w) {
     $('weapon-name').textContent = WEAPON_INFO[w.type].name;
     $('weapon-name').style.color = WEAPON_INFO[w.type].color;
     const pips = $('weapon-pips').children;
     for (let i = 0; i < 8; i++) pips[i].classList.toggle('on', i < w.level);
-    $('missile-name').textContent = w.missile === 'homing' ? '追蹤飛彈 HOMING' : w.missile === 'napalm' ? '燃燒飛彈 NAPALM' : '無飛彈';
+    $('missile-name').textContent = (MISSILE_INFO[w.missile] || MISSILE_INFO.none).name;
   }
   setStage(name) { $('stage-name').textContent = name; }
   banner(big, sub, dur = 2.6) {
@@ -82,4 +89,17 @@ export class UI {
     $('stageclear-screen').classList.remove('hidden');
     setTimeout(() => { $('stageclear-screen').classList.add('hidden'); cb && cb(); }, 2600);
   }
+  showChoice(opts, onPick) {
+    const scr = $('choice-screen');
+    const tagName = { weapon: '主武器', missile: '飛彈', upgrade: '強化', bonus: '獎勵' };
+    const tagCls = { weapon: 'tw', missile: 'tm', upgrade: 'tu', bonus: 'tb' };
+    opts.forEach((o, i) => {
+      const c = $(`choice-${i}`);
+      c.innerHTML = `<div class="ctag ${tagCls[o.kind] || 'tu'}">${tagName[o.kind] || '強化'}</div>` +
+        `<div class="cicon">${o.icon}</div><div class="cname">${o.name}</div><div class="cdesc">${o.desc}</div>`;
+      c.onclick = () => onPick(o.id);
+    });
+    scr.classList.remove('hidden');
+  }
+  hideChoice() { $('choice-screen').classList.add('hidden'); }
 }
