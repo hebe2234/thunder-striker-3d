@@ -16,9 +16,16 @@ export class UI {
     $('mute-btn').onclick = () => this.toggleMute();
     $('pause-btn').onclick = () => this.togglePause();
     $('bomb-btn').onclick = () => this.game.tryBomb();
+    document.querySelectorAll('.diff-btn').forEach(b => {
+      b.onclick = () => { if (this.game) this.game.setDifficulty(b.dataset.diff); };
+    });
+    if (this.game) this.syncDifficulty(this.game.diffId);
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.game.state === 'playing') this.game.togglePause(true);
     });
+  }
+  syncDifficulty(id) {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('sel', b.dataset.diff === id));
   }
   startGame() { this.game.startGame(); }
   togglePause() { this.game.togglePause(); }
@@ -29,7 +36,7 @@ export class UI {
   showHud() { $('hud').classList.add('on'); }
   hideHud() { $('hud').classList.remove('on'); }
   hideTitle() { $('title-screen').classList.add('hidden'); }
-  showTitle(hi) { $('title-hi').textContent = hi.toLocaleString(); $('title-screen').classList.remove('hidden'); }
+  showTitle(hi) { $('title-hi').textContent = hi.toLocaleString(); $('title-screen').classList.remove('hidden'); if (this.game) this.syncDifficulty(this.game.diffId); }
   setScore(s) { $('score').textContent = s.toLocaleString(); }
   setHi(h) { $('hiscore').textContent = h.toLocaleString(); }
   setChain(c) { $('chain').textContent = c >= 5 ? `🔥 連擊 x${c}` : ''; }

@@ -9,6 +9,15 @@ import { makePlayer, makeDrone, groundTexture, makeGroundProp, makeCloud, glowSp
 const V3 = THREE.Vector3;
 const clamp = THREE.MathUtils.clamp;
 
+// 難度設定：speed 影響遊戲速度（敵方移動/開火節奏、敵彈速度、地面捲動）
+export const DIFFICULTIES = {
+  easy:      { id: 'easy',      name: '簡單', speed: 0.88, hp: 0.6, fireRate: 0.55, playerDmg: 1.3, dmgTaken: 0.7, score: 0.8 },
+  normal:    { id: 'normal',    name: '普通', speed: 1.0,  hp: 1.0, fireRate: 1.0,  playerDmg: 1.0, dmgTaken: 1.0, score: 1.0 },
+  hard:      { id: 'hard',      name: '困難', speed: 1.12, hp: 1.5, fireRate: 1.4,  playerDmg: 0.9, dmgTaken: 1.3, score: 1.25 },
+  nightmare: { id: 'nightmare', name: '噩夢', speed: 1.25, hp: 2.2, fireRate: 1.85, playerDmg: 0.8, dmgTaken: 1.6, score: 1.5 },
+};
+export const DIFF_IDS = ['easy', 'normal', 'hard', 'nightmare'];
+
 export class Game {
   constructor(container, ui) {
     this.ui = ui; this.container = container;
@@ -70,7 +79,10 @@ export class Game {
     this.loop = 1; this.stageIdx = 0; this.waveT = 0; this.waves = [];
     this.boss = null; this.bossMode = false;
     this.bombWave = null; this.flashBomb = 0;
-    this.difficulty = { hp: 1, fireRate: 1 };
+    this.diffId = localStorage.getItem('ts3d_diff') || 'normal';
+    if (!DIFFICULTIES[this.diffId]) this.diffId = 'normal';
+    this.gameSpeed = 1;
+    this.difficulty = { hp: 1, fireRate: 1, playerDmg: 1, dmgTaken: 1, score: 1 };
     this.scrollSpeed = 13;
     this.attractT = 0;
     this._ray = new THREE.Raycaster();
@@ -123,7 +135,8 @@ export class Game {
     for (const p of this.props) { this.scene.remove(p); disposeGroup(p); }
     this.props = [];
     for (let k = 0; k < 24; k++) this.props.push(this._newProp(true));
-    this.ui.setStage(this.stage.name);
+    const dn = (DIFFICULTIES[this.diffId] || DIFFICULTIES.normal).name;
+    this.ui.setStage(`${this.stage.name} · ${dn}`);
   }
 
   // ---------- 輸入 ----------
@@ -190,8 +203,25 @@ export class Game {
     this._spawnPlayer(true);
   }
   _applyDifficulty() {
+    const d = DIFFICULTIES[this.diffId] || DIFFICULTIES.normal;
     const l = this.loop;
-    this.difficulty = { hp: 1 + (l - 1) * 0.55, fireRate: Math.min(1.8, 1 + (l - 1) * 0.18) };
+    this.gameSpeed = d.speed * (1 + (l - 1) * 0.05);
+    this.difficulty = {
+      hp: d.hp * (1 + (l - 1) * 0.55),
+      fireRate: Math.min(2.4, d.fireRate * (1 + (l - 1) * 0.18)),
+      playerDmg: d.playerDmg,
+      dmgTaken: d.dmgTaken,
+      score: d.score,
+    };
+  }
+  setDifficulty(id) {
+    if (!DIFFICULTIES[id]) return;
+    this.diffId = id;
+    localStorage.setItem('ts3d_diff', id);
+    this._applyDifficulty();
+    const dn = (DIFFICULTIES[this.diffId] || DIFFICULTIES.normal).name;
+    this.ui.setStage(`${this.stage.name} · ${dn}`);
+    this.ui.syncDifficulty(id);
   }
   _clearField() {
     for (const e of this.enemies) { this.scene.remove(e.mesh); if (e.shadow) this.scene.remove(e.shadow); }
@@ -392,7 +422,8 @@ export class Game {
   }
   spawnBullet(o) {
     const b = this._getBullet();
-    Object.assign(b, { x: o.x, y: o.y, z: o.z, vx: o.vx, vz: o.vz, dmg: o.dmg, r: o.r || 0.5, dead: false, life: 2.2, pierce: !!o.pierce, _hitSet: null });
+    const pdmg = this.difficulty.playerDmg || 1;
+    Object.assign(b, { x: o.x, y: o.y, z: o.z, vx: o.vx, vz: o.vz, dmg: o.dmg * pdmg, r: o.r || 0.5, dead: false, life: 2.2, pierce: !!o.pierce, _hitSet: null });
     b.mesh.material.color.set(o.color || 0x9fe8ff);
     b.mesh.children[0].material.color.set(o.color || 0x66ccff);
     const s = o.scale || 1;
@@ -407,7 +438,9 @@ export class Game {
     mesh.add(core);
     const halo = glowSprite(o.haloTint || 0xb45eff, o.tesla ? 4.2 : 3.2); mesh.add(halo);
     mesh.position.set(o.x, o.y, o.z); this.scene.add(mesh);
-    this.plasmas.push(Object.assign({ mesh, dead: false, life: 2.4, r: 0.9, tesla: false, chains: 0 }, o));
+    const pl = Object.assign({ mesh, dead: false, life: 2.4, r: 0.9, tesla: false, chains: 0 }, o);
+    pl.dmg = (o.dmg || 0) * (this.difficulty.playerDmg || 1);
+    this.plasmas.push(pl);
   }
   spawnMissile(o) {
     const mesh = new THREE.Group();
@@ -415,7 +448,9 @@ export class Game {
     body.rotation.x = Math.PI / 2; mesh.add(body);
     const halo = glowSprite(o.cluster ? 0xffe066 : o.rocket ? 0xffb066 : o.homing ? 0x7bff9e : 0xff9d2e, 1.2); mesh.add(halo);
     mesh.position.set(o.x, o.y, o.z); this.scene.add(mesh);
-    this.missiles.push(Object.assign({ mesh, dead: false, life: 4, r: 0.6, t: 0, tx: 0, tz: 0 }, o));
+    const mm = Object.assign({ mesh, dead: false, life: 4, r: 0.6, t: 0, tx: 0, tz: 0 }, o);
+    mm.dmg = (o.dmg || 0) * (this.difficulty.playerDmg || 1);
+    this.missiles.push(mm);
   }
   _getEB() {
     let b = this._ebPool.pop();
@@ -451,7 +486,7 @@ export class Game {
 
   // ---------- 計分 / 連擊 ----------
   addScore(n, x, z) {
-    this.score += n;
+    this.score += Math.round(n * (this.difficulty.score || 1));
     if (this.score > this.hi) { this.hi = this.score; this.ui.setHi(this.hi); }
     this.ui.setScore(this.score);
   }
@@ -462,6 +497,7 @@ export class Game {
 
   // ---------- 戰鬥 ----------
   laserDamage(x, y, z, dx, dz, dmg, width) {
+    dmg *= (this.difficulty.playerDmg || 1);
     for (const e of this.enemies) {
       const ex = e.x - x, ez = e.z - z;
       const t = ex * dx + ez * dz;
@@ -497,7 +533,7 @@ export class Game {
       this.audio.pickup();
       return;
     }
-    p.hp -= dmg; p.regenT = 4;
+    p.hp -= dmg * (this.difficulty.dmgTaken || 1); p.regenT = 4;
     this.ui.setHp(p.hp, p.maxHp);
     this.ui.damageFlash(); this.shake.add(0.28);
     this.audio.hit();
@@ -530,8 +566,8 @@ export class Game {
     this.rings.update(this.state === 'paused' || this.state === 'choosing' ? 0 : dt);
     this.shake.update(dt);
     this._updateCamera(dt);
-    // 地面捲動（標題也捲）
-    if (this.state !== 'paused' && this.groundTex) this.groundTex.offset.y -= (this.scrollSpeed * dt) / 22;
+    // 地面捲動（標題也捲；遊戲速度隨難度）
+    if (this.state !== 'paused' && this.groundTex) this.groundTex.offset.y -= (this.scrollSpeed * this.gameSpeed * dt) / 22;
     this.renderer.render(this.scene, this.camera);
   }
   _attract(dt) {
@@ -562,12 +598,13 @@ export class Game {
 
   update(dt) {
     const p = this.player, ui = this.ui;
+    const wdt = dt * this.gameSpeed; // 世界 dt：敵方移動/開火、捲動、敵彈都吃遊戲速度
     // ---- 波次 ----
     if (!this.bossMode) {
       this.waveT += dt;
       while (this.waves.length && this.waves[0].t <= this.waveT) this.waves.shift().fn();
     }
-    this._scrollWorld(dt);
+    this._scrollWorld(wdt);
     // ---- 玩家 ----
     if (p.alive) {
       this._movePlayer(dt);
@@ -597,9 +634,9 @@ export class Game {
     this.playerShadow.visible = p.alive;
 
     // ---- 實體更新 ----
-    for (const e of this.enemies) e.update(dt);
-    if (this.boss && !this.boss.dead) this.boss.update(dt);
-    for (const it of this.items) it.update(dt);
+    for (const e of this.enemies) e.update(wdt);
+    if (this.boss && !this.boss.dead) this.boss.update(wdt);
+    for (const it of this.items) it.update(wdt);
     this._updateBullets(dt);
     this._updatePlasmas(dt);
     this._updateMissiles(dt);
@@ -613,7 +650,7 @@ export class Game {
       const k = Math.min(1, bw.t / bw.dur);
       const rad = bw.maxR * (1 - Math.pow(1 - k, 2));
       bw.hit = bw.hit || new Set();
-      const dmgAll = e => { if (!bw.hit.has(e) && Math.hypot(e.x - p.x, e.z - p.z) < rad + e.r) { bw.hit.add(e); e.hurt(90, e.x, e.z); } };
+      const dmgAll = e => { if (!bw.hit.has(e) && Math.hypot(e.x - p.x, e.z - p.z) < rad + e.r) { bw.hit.add(e); e.hurt(90 * (this.difficulty.playerDmg || 1), e.x, e.z); } };
       this.enemies.forEach(dmgAll);
       if (this.boss && !this.boss.dead) dmgAll(this.boss);
       if (Math.random() < 0.8) this.particles.explosion(p.x + (Math.random() - .5) * rad, 1.5, p.z + (Math.random() - .5) * rad, 0.9);
@@ -653,8 +690,9 @@ export class Game {
       if (b.life <= 0 || b.z < -70) b.dead = true;
       b.mesh.position.set(b.x, b.y, b.z);
     }
+    const wdt = dt * this.gameSpeed; // 敵彈速度吃遊戲速度
     for (const b of this.enemyBullets) {
-      b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt; b.life -= dt;
+      b.x += b.vx * wdt; b.y += b.vy * wdt; b.z += b.vz * wdt; b.life -= wdt;
       if (b.life <= 0 || b.z > 16 || Math.abs(b.x) > 20 || b.y < -2) b.dead = true;
       b.mesh.position.set(b.x, b.y, b.z);
     }
@@ -827,7 +865,7 @@ export class Game {
       for (const e of targets) {
         if (e.dead) continue;
         const dx = e.x - p.x, dz = e.z - p.z, rr = e.r * 0.85 + pr;
-        if (dx * dx + dz * dz < rr * rr) { e.hurt(60, p.x, p.z); this.hurtPlayer(34); break; }
+        if (dx * dx + dz * dz < rr * rr) { e.hurt(60 * (this.difficulty.playerDmg || 1), p.x, p.z); this.hurtPlayer(34); break; }
       }
     }
   }

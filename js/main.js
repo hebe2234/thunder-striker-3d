@@ -10,6 +10,7 @@ window.addEventListener('unhandledrejection', e => { errBox.textContent += `[rej
 const ui = new UI(null);
 const game = new Game(document.getElementById('stage'), ui);
 ui.game = game;
+ui.syncDifficulty(game.diffId);
 
 const params = new URLSearchParams(location.search);
 if (params.get('muted') === '1') { game.audio.init(); game.audio.toggleMute(); document.getElementById('mute-btn').textContent = '🔇'; }

@@ -103,6 +103,18 @@
   .wcard.yellow h4 { color:#fff49e; } .wcard.yellow { border-color:#fff06655; }
   .howto { margin-top:14px; font-size:12px; color:#7f8db3; line-height:2; letter-spacing:1px; }
   .howto b { color:#cfe0ff; }
+  /* ---------- 難度選擇 ---------- */
+  .diff-row { display:flex; gap:8px; align-items:center; justify-content:center; margin:2px 0 8px; flex-wrap:wrap; }
+  .diff-label { font-size:13px; letter-spacing:4px; color:#9fb4dd; margin-right:4px; }
+  .diff-btn { pointer-events:auto; padding:9px 20px; font-size:15px; font-weight:700; letter-spacing:2px;
+    border-radius:10px; background:rgba(8,16,36,.8); color:#9fb4dd; border:1px solid #29c7ff44;
+    cursor:pointer; font-family:inherit; }
+  .diff-btn:hover { border-color:#8ef3ff; color:#eaf1ff; }
+  .diff-btn.sel { background:linear-gradient(180deg,#8ef3ff,#29c7ff); color:#04121f; border-color:#8ef3ff;
+    box-shadow:0 0 14px #29c7ff88; }
+  .diff-btn.nightmare.sel { background:linear-gradient(180deg,#ff8a8a,#c81e3a); color:#fff; border-color:#ff5e5e;
+    box-shadow:0 0 18px #ff2e2e99; }
+  .diff-note { font-size:11px; color:#7f8db3; letter-spacing:1px; margin:0 0 12px; }
   .big-result { font-size:clamp(40px,9vw,72px); font-weight:900; letter-spacing:10px; margin-bottom:10px; }
   #gameover-screen .big-result { color:#ff6b6b; text-shadow:0 0 20px #ff2e2e, 3px 3px 0 #5c0d0d; }
   #victory-screen .big-result { color:#8effa8; text-shadow:0 0 20px #2eff7a, 3px 3px 0 #0d5c26; }
@@ -182,6 +194,13 @@
 <div class="overlay" id="title-screen">
   <div class="game-title">雷霆戰機<span class="t3d">3D</span></div>
   <div class="game-sub">THUNDER STRIKER 3D · 致敬雷電的立體射擊遊戲</div>
+  <div class="diff-row"><span class="diff-label">難度</span>
+    <button class="diff-btn" data-diff="easy">🌱 簡單</button>
+    <button class="diff-btn" data-diff="normal">🔰 普通</button>
+    <button class="diff-btn" data-diff="hard">🔥 困難</button>
+    <button class="diff-btn nightmare" data-diff="nightmare">💀 噩夢</button>
+  </div>
+  <div class="diff-note">難度影響敵機血量、火力、子彈速度與整體遊戲速度 · 噩夢通關分數 ×1.5</div>
   <button class="btn" id="start-btn">出 擊</button>
   <div class="hi-line">🏆 最高分 <span id="title-hi">0</span></div>
   <div class="weapons-show">
