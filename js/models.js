@@ -292,7 +292,36 @@ export function makeItemSprite(kind) {
 }
 
 // ================= 地面地景 =================
+// 真實照片貼圖（CC0，見 assets/CREDITS.md）：先回傳程序化 canvas 頂著，照片載入完成後自動換上
+const _groundCache = {};
+const _groundWaiters = [];
+const GROUND_PHOTO = {
+  city: 'assets/asphalt_01.jpg',        // 都市：瀝青路基
+  desert: 'assets/aerial_beach_01.jpg', // 沙漠：空拍沙地
+  night: 'assets/aerial_ground_rock.jpg', // 午夜：深色岩地
+};
 export function groundTexture(theme) {
+  if (!_groundCache[theme]) {
+    _groundCache[theme] = _canvasGround(theme);
+    const url = GROUND_PHOTO[theme];
+    if (url) new THREE.TextureLoader().load(url, t => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 10);
+      t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+      t.userData.shared = true;
+      _groundCache[theme] = t;
+      for (let i = _groundWaiters.length - 1; i >= 0; i--)
+        if (_groundWaiters[i].theme === theme) _groundWaiters.splice(i, 1)[0].cb(t);
+    });
+  }
+  return _groundCache[theme];
+}
+// 照片就緒時通知；若已是照片則立即回呼
+export function onGroundTexture(theme, cb) {
+  const cur = groundTexture(theme);
+  if (cur.userData && cur.userData.shared) cb(cur);
+  else _groundWaiters.push({ theme, cb });
+}
+function _canvasGround(theme) {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d');
   const pal = {

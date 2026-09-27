@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import { AudioSys } from './audio.js';
 import { WeaponSystem, WEAPON_INFO, SKILL_DEFS, buildChoices } from './weapons.js';
 import { Enemy, Midboss, FinalBoss, Item, spawnEnemyHomingMissile, disposeGroup } from './entities.js';
-import { Particles, Rings, Shake } from './particles.js';
-import { makePlayer, makeDrone, groundTexture, makeGroundProp, makeCloud, glowSprite, blobShadow, MB } from './models.js';
+import { Particles, Rings, Shake, Booms } from './particles.js';
+import { makePlayer, makeDrone, groundTexture, onGroundTexture, makeGroundProp, makeCloud, glowSprite, blobShadow, MB } from './models.js';
 
 const V3 = THREE.Vector3;
 const clamp = THREE.MathUtils.clamp;
@@ -40,6 +40,7 @@ export class Game {
 
     this.audio = new AudioSys();
     this.particles = new Particles(this.scene);
+    this.booms = new Booms(this.scene);
     this.rings = new Rings(this.scene);
     this.shake = new Shake();
     this.weapons = new WeaponSystem(this);
@@ -125,10 +126,20 @@ export class Game {
     this.stageIdx = i;
     this.stage = STAGES[i];
     this.routeDist = 0; this._routeDX = 0; // 換關路線重來
-    if (this.ground) { this.scene.remove(this.ground); this.ground.geometry.dispose(); this.ground.material.map.dispose(); this.ground.material.dispose(); }
+    if (this.ground) { this.scene.remove(this.ground); this.ground.geometry.dispose(); const _mp = this.ground.material.map; if (_mp && !_mp.userData.shared) _mp.dispose(); this.ground.material.dispose(); }
     this.groundTex = groundTexture(this.stage.theme);
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 220),
-      new THREE.MeshStandardMaterial({ map: this.groundTex, roughness: 1, metalness: 0 }));
+      new THREE.MeshStandardMaterial({ map: this.groundTex, roughness: 1, metalness: 0,
+        color: this.stage.theme === 'night' ? 0x5f6f9e : 0xffffff }));
+    this.ground.userData.theme = this.stage.theme;
+    const _gr = this.ground, _want = this.stage.theme;
+    onGroundTexture(_want, t => {
+      if (this.ground !== _gr) return; // 已又換關：丟棄遲到的貼圖
+      const cur = _gr.material.map;
+      if (cur) { t.offset.copy(cur.offset); t.repeat.copy(cur.repeat); }
+      _gr.material.map = t; _gr.material.needsUpdate = true;
+      this.groundTex = t;
+    });
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.position.set(0, 0, -70);
     this.scene.add(this.ground);
@@ -549,6 +560,7 @@ export class Game {
     p.alive = false; this.playerMesh.visible = false;
     this.shieldMesh.visible = false;
     this.particles.explosion(p.x, p.y, p.z, 2.4);
+    this.booms.spawn(p.x, p.y, p.z, 2.8);
     this.rings.spawn(p.x, 1, p.z, 0x66ccff, 10, 0.8);
     this.audio.playerDown(); this.shake.add(0.8);
     this.ui.damageFlash();
@@ -567,6 +579,7 @@ export class Game {
     else if (this.state === 'title') this._attract(dt);
     // 'choosing' / 'paused'：凍結遊戲邏輯，只渲染
     this.particles.update(this.state === 'paused' || this.state === 'choosing' ? 0 : dt);
+    this.booms.update(this.state === 'paused' || this.state === 'choosing' ? 0 : dt);
     this.rings.update(this.state === 'paused' || this.state === 'choosing' ? 0 : dt);
     this.shake.update(dt);
     this._updateCamera(dt);
@@ -674,6 +687,7 @@ export class Game {
       this.enemies.forEach(dmgAll);
       if (this.boss && !this.boss.dead) dmgAll(this.boss);
       if (Math.random() < 0.8) this.particles.explosion(p.x + (Math.random() - .5) * rad, 1.5, p.z + (Math.random() - .5) * rad, 0.9);
+      if (Math.random() < 0.5) this.booms.spawn(p.x + (Math.random() - .5) * rad, 1.5, p.z + (Math.random() - .5) * rad, 1.3);
       if (k >= 1) this.bombWave = null;
     }
     if (this.flashBomb > 0) { this.flashBomb -= dt; }

@@ -82,6 +82,36 @@ export class Particles {
   }
 }
 
+export class Booms {
+  constructor(scene) {
+    this.scene = scene; this.list = [];
+    this.tex = new THREE.TextureLoader().load('assets/explosion1_6.png');
+    this.tex.colorSpace = THREE.SRGBColorSpace;
+  }
+  spawn(x, y, z, scale = 1) {
+    if (!this.tex.image) return; // 貼圖還沒載入就跳過
+    y = Math.max(y, 2 * scale); // 精靈下半不沉入地面
+    const t = this.tex.clone(); t.needsUpdate = true;
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    t.repeat.set(0.1, 0.2); t.offset.set(0, 0.8);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+    s.position.set(x, y, z); s.scale.set(4 * scale, 4 * scale, 1); s.renderOrder = 6;
+    this.scene.add(s);
+    this.list.push({ s, tex: t, et: 0, dur: 0.55, s0: 4 * scale });
+  }
+  update(dt) {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const b = this.list[i]; b.et += dt;
+      const k = Math.min(1, b.et / b.dur);
+      const frame = Math.min(49, (k * 50) | 0);
+      b.tex.offset.set((frame % 10) * 0.1, 0.8 - (((frame / 10) | 0) * 0.2));
+      const sc = b.s0 * (1 + k * 0.9); b.s.scale.set(sc, sc, 1);
+      b.s.material.opacity = 1 - k * k;
+      if (k >= 1) { this.scene.remove(b.s); b.s.material.dispose(); b.tex.dispose(); this.list.splice(i, 1); }
+    }
+  }
+}
+
 export class Rings {
   constructor(scene, max = 24) {
     this.pool = [];

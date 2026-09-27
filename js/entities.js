@@ -135,6 +135,7 @@ export class Enemy {
     const g = this.game;
     const big = this.kind === 'gunship' || this.kind === 'carrier';
     g.particles.explosion(this.x, this.y, this.z, big ? 1.8 : 1.0);
+    g.booms.spawn(this.x, this.y, this.z, big ? 2.0 : 1.1);
     g.rings.spawn(this.x, Math.max(0.3, this.y - 1), this.z, 0xffaa33, big ? 6 : 3.5, 0.45);
     g.audio.explosion(big);
     g.shake.add(big ? 0.35 : 0.12);
@@ -280,6 +281,7 @@ export class Midboss {
     }
     setTimeout(() => {
       g.particles.explosion(this.x, this.y, this.z, 3.2);
+      g.booms.spawn(this.x, this.y, this.z, 3.6);
       g.rings.spawn(this.x, 1, this.z, 0xffcc66, 16, 0.9);
       g.scene.remove(this.mesh); g.scene.remove(this.shadow); disposeGroup(this.mesh);
       g.addScore(this.tier === 1 ? 10000 : 15000, this.x, this.z);
@@ -405,6 +407,7 @@ export class FinalBoss {
     }
     setTimeout(() => {
       g.particles.explosion(this.x, this.y, this.z, 4.5);
+      g.booms.spawn(this.x, this.y, this.z, 5);
       g.rings.spawn(this.x, 1, this.z, 0xffcc66, 24, 1.2);
       g.rings.spawn(this.x, 1, this.z, 0xff66aa, 18, 1.0);
       g.scene.remove(this.mesh); g.scene.remove(this.shadow); disposeGroup(this.mesh);
