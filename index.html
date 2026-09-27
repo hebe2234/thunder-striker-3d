@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>雷霆戰機3D · Thunder Striker 3D</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#04060f;
+    font-family:"PingFang TC","Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;
+    color:#dfe9ff; user-select:none; -webkit-user-select:none; touch-action:none; }
+  #stage { position:fixed; inset:0; }
+  #stage canvas { display:block; width:100%; height:100%; }
+
+  /* ---------- HUD ---------- */
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:5; display:none; }
+  #hud.on { display:block; }
+  .hud-top { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    align-items:flex-start; padding:10px 14px; }
+  .hud-score { text-align:left; }
+  .hud-score .lbl { font-size:10px; letter-spacing:2px; color:#7f8db3; }
+  .hud-score .val { font-size:22px; font-weight:800; color:#fff; text-shadow:0 0 12px #29c7ff; font-variant-numeric:tabular-nums; }
+  .hud-score .val.hi { color:#ffd75e; text-shadow:0 0 12px #ff9d2e; }
+  #chain { font-size:12px; color:#ff7ad9; text-shadow:0 0 8px #ff2e9d; margin-top:2px; min-height:16px; }
+  .hud-right { text-align:right; }
+  #weapon-panel { background:rgba(6,12,28,.72); border:1px solid #29c7ff55; border-radius:10px;
+    padding:8px 10px; min-width:150px; box-shadow:0 0 14px #29c7ff22; }
+  #weapon-name { font-size:14px; font-weight:700; color:#8ef3ff; }
+  #weapon-pips { margin-top:5px; display:flex; gap:4px; justify-content:flex-end; }
+  #weapon-pips i { width:12px; height:7px; border-radius:2px; background:#1b2740; border:1px solid #29c7ff44; }
+  #weapon-pips i.on { background:linear-gradient(180deg,#8ef3ff,#1e9dff); box-shadow:0 0 6px #29c7ff; }
+  #missile-name { font-size:11px; color:#9fb4dd; margin-top:4px; }
+  .hud-bottom-left { position:absolute; left:14px; bottom:12px; display:flex; flex-direction:column; gap:6px; }
+  #lives { display:flex; gap:5px; }
+  #lives .ship { width:22px; height:22px; background:radial-gradient(circle at 50% 35%, #8ef3ff, #1e6dff 70%);
+    clip-path:polygon(50% 0,100% 100%,50% 78%,0 100%); filter:drop-shadow(0 0 4px #29c7ff); }
+  #lives .ship.lost { opacity:.15; filter:none; }
+  #bombs { display:flex; gap:5px; align-items:center; }
+  #bombs .bomb { width:18px; height:18px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #ffe9a8, #ff9d2e 60%, #b35400);
+    box-shadow:0 0 8px #ff9d2e; }
+  #bombs .bomb.lost { opacity:.15; box-shadow:none; }
+  #bombs .blbl { font-size:10px; color:#7f8db3; letter-spacing:1px; margin-right:2px; }
+  #stage-name { position:absolute; bottom:12px; right:14px; font-size:12px; letter-spacing:2px; color:#7f8db3; }
+  #mute-btn { position:absolute; top:64px; right:14px; pointer-events:auto; width:38px; height:38px;
+    border-radius:50%; border:1px solid #29c7ff55; background:rgba(6,12,28,.7); color:#8ef3ff;
+    font-size:17px; cursor:pointer; }
+  #pause-btn { position:absolute; top:110px; right:14px; pointer-events:auto; width:38px; height:38px;
+    border-radius:50%; border:1px solid #29c7ff55; background:rgba(6,12,28,.7); color:#8ef3ff;
+    font-size:15px; cursor:pointer; display:none; }
+  body.touch #pause-btn { display:block; }
+  /* boss bar */
+  #boss-bar { position:absolute; top:64px; left:50%; transform:translateX(-50%); width:min(62vw,520px); display:none; }
+  #boss-bar.on { display:block; }
+  #boss-bar .bn { text-align:center; font-size:13px; letter-spacing:4px; color:#ff6b6b; text-shadow:0 0 10px #ff2e2e; margin-bottom:4px; }
+  #boss-bar .track { height:10px; border-radius:6px; background:#20060a; border:1px solid #ff2e2e88; overflow:hidden; }
+  #boss-bar .fill { height:100%; width:100%; border-radius:6px;
+    background:linear-gradient(90deg,#ff2e2e,#ff9d2e); box-shadow:0 0 10px #ff2e2e; transition:width .18s; }
+  /* center banner */
+  #banner { position:absolute; top:34%; left:0; right:0; text-align:center; display:none; pointer-events:none; }
+  #banner.on { display:block; animation:bannerIn .5s ease-out; }
+  #banner .big { font-size:clamp(34px,8vw,64px); font-weight:900; letter-spacing:10px; color:#fff;
+    text-shadow:0 0 18px #ff2e2e,0 0 46px #ff2e2e, 3px 3px 0 #7a0d0d; }
+  #banner .sub { font-size:clamp(14px,3vw,20px); letter-spacing:6px; color:#ffd75e; margin-top:8px; text-shadow:0 0 12px #ff9d2e; }
+  @keyframes bannerIn { from { transform:scale(1.6); opacity:0; } to { transform:scale(1); opacity:1; } }
+  /* damage vignette */
+  #dmg-vignette { position:absolute; inset:0; pointer-events:none; opacity:0;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(255,30,30,.55) 100%); transition:opacity .1s; }
+
+  /* ---------- touch controls ---------- */
+  #bomb-btn { position:absolute; right:18px; bottom:64px; width:74px; height:74px; border-radius:50%;
+    pointer-events:auto; display:none; border:2px solid #ff9d2e; color:#fff; font-weight:800; font-size:15px;
+    background:radial-gradient(circle at 35% 30%, #ff9d2ecc, #b35400dd); box-shadow:0 0 18px #ff9d2e88; cursor:pointer; }
+  body.touch #bomb-btn { display:block; }
+  #bomb-btn:active { transform:scale(.92); }
+
+  /* ---------- overlays ---------- */
+  .overlay { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; text-align:center; padding:20px;
+    background:radial-gradient(ellipse at 50% 30%, rgba(10,20,50,.55), rgba(2,4,12,.88)); }
+  .overlay.hidden { display:none; }
+  .game-title { font-size:clamp(44px,11vw,92px); font-weight:900; letter-spacing:12px; color:#fff;
+    text-shadow:0 0 14px #29c7ff, 0 0 44px #29c7ff, 4px 4px 0 #0b3f66, 8px 8px 0 #041a2e;
+    transform:perspective(600px) rotateX(12deg); margin-bottom:2px; }
+  .game-title .t3d { color:#8ef3ff; }
+  .game-sub { font-size:clamp(12px,2.6vw,17px); letter-spacing:6px; color:#9fb4dd; margin-bottom:26px; }
+  .btn { pointer-events:auto; display:inline-block; margin:6px; padding:14px 44px; font-size:18px; font-weight:800;
+    letter-spacing:4px; color:#04121f; background:linear-gradient(180deg,#8ef3ff,#29c7ff);
+    border:none; border-radius:12px; cursor:pointer; box-shadow:0 0 22px #29c7ff99, 0 4px 0 #0b6d96; }
+  .btn:active { transform:translateY(2px); box-shadow:0 0 12px #29c7ff66, 0 1px 0 #0b6d96; }
+  .btn.ghost { background:transparent; color:#8ef3ff; border:1px solid #29c7ff88; box-shadow:none; font-size:14px; padding:10px 30px; }
+  .hi-line { margin:14px 0 4px; font-size:14px; letter-spacing:2px; color:#ffd75e; text-shadow:0 0 10px #ff9d2e; }
+  .weapons-show { display:flex; gap:10px; margin:18px 0 8px; flex-wrap:wrap; justify-content:center; max-width:640px; }
+  .wcard { background:rgba(8,16,36,.8); border:1px solid #29c7ff44; border-radius:12px; padding:12px 14px;
+    width:172px; text-align:left; }
+  .wcard h4 { font-size:14px; margin-bottom:6px; }
+  .wcard p { font-size:11px; color:#9fb4dd; line-height:1.55; }
+  .wcard.red h4 { color:#ff8a8a; } .wcard.red { border-color:#ff5e5e55; }
+  .wcard.blue h4 { color:#8ef3ff; }
+  .wcard.purple h4 { color:#d49aff; } .wcard.purple { border-color:#b45eff55; }
+  .howto { margin-top:14px; font-size:12px; color:#7f8db3; line-height:2; letter-spacing:1px; }
+  .howto b { color:#cfe0ff; }
+  .big-result { font-size:clamp(40px,9vw,72px); font-weight:900; letter-spacing:10px; margin-bottom:10px; }
+  #gameover-screen .big-result { color:#ff6b6b; text-shadow:0 0 20px #ff2e2e, 3px 3px 0 #5c0d0d; }
+  #victory-screen .big-result { color:#8effa8; text-shadow:0 0 20px #2eff7a, 3px 3px 0 #0d5c26; }
+  .final-score { font-size:15px; letter-spacing:2px; color:#dfe9ff; margin:6px 0 18px; }
+  .final-score b { color:#ffd75e; font-size:24px; }
+  #errlog { display:none; }
+  @media (max-width:640px){
+    .weapons-show { display:none; }
+    #weapon-panel { min-width:118px; padding:6px 8px; }
+    .hud-score .val { font-size:17px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="hud">
+  <div class="hud-top">
+    <div class="hud-score">
+      <div class="lbl">SCORE</div><div class="val" id="score">0</div>
+      <div class="lbl" style="margin-top:6px">HI-SCORE</div><div class="val hi" id="hiscore">0</div>
+      <div id="chain"></div>
+    </div>
+    <div class="hud-right">
+      <div id="weapon-panel">
+        <div id="weapon-name">火神炮 VULCAN</div>
+        <div id="weapon-pips"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div id="missile-name">追蹤飛彈 HOMING</div>
+      </div>
+    </div>
+  </div>
+  <button id="mute-btn" title="音效開關">🔊</button>
+  <button id="pause-btn" title="暫停">⏸</button>
+  <div id="boss-bar"><div class="bn" id="boss-name">警告</div><div class="track"><div class="fill" id="boss-fill"></div></div></div>
+  <div id="banner"><div class="big" id="banner-big">警告</div><div class="sub" id="banner-sub"></div></div>
+  <div class="hud-bottom-left">
+    <div id="lives"></div>
+    <div id="bombs"><span class="blbl">BOMB</span></div>
+  </div>
+  <div id="stage-name">STAGE 1 · 黃昏都市</div>
+  <button id="bomb-btn">💣<br>BOMB</button>
+  <div id="dmg-vignette"></div>
+</div>
+
+<div class="overlay" id="title-screen">
+  <div class="game-title">雷霆戰機<span class="t3d">3D</span></div>
+  <div class="game-sub">THUNDER STRIKER 3D · 致敬雷電的立體射擊遊戲</div>
+  <button class="btn" id="start-btn">出 擊</button>
+  <div class="hi-line">🏆 最高分 <span id="title-hi">0</span></div>
+  <div class="weapons-show">
+    <div class="wcard red"><h4>🔴 火神散射炮 VULCAN</h4><p>經典紅色武器。滿級 7 向扇形彈幕＋雙側炮，火力覆蓋全螢幕，雜魚殺手。</p></div>
+    <div class="wcard blue"><h4>🔵 雷射光束 LASER</h4><p>藍色武器。超高貫穿傷害的持續光束，滿級三束齊發，BOSS 剋星。</p></div>
+    <div class="wcard purple"><h4>🟣 電漿爆裂彈 PLASMA</h4><p>紫色武器。緩慢重型電漿球，命中引發範圍爆炸，清場神器。</p></div>
+  </div>
+  <div class="howto">
+    <b>操作：</b>滑鼠 / 手指拖曳移動 · 自動開火 · <b>空白鍵 / X</b> 炸彈 · <b>P</b> 暫停 · <b>M</b> 靜音<br>
+    吃到 <b>R / B / P</b> 切換武器，<b>M / H</b> 飛彈，<b>Ⓟ</b> 升級火力，<b>💣</b> 補炸彈
+  </div>
+</div>
+
+<div class="overlay hidden" id="pause-screen">
+  <div class="big-result" style="color:#8ef3ff;text-shadow:0 0 20px #29c7ff;">暫停</div>
+  <button class="btn" id="resume-btn">繼 續</button><br>
+  <button class="btn ghost" id="quit-btn">回到標題</button>
+</div>
+
+<div class="overlay hidden" id="gameover-screen">
+  <div class="big-result">任務失敗</div>
+  <div class="final-score">最終得分 <b id="final-score">0</b></div>
+  <button class="btn" id="retry-btn">再 戰</button><br>
+  <button class="btn ghost" id="go-title-btn">回到標題</button>
+</div>
+
+<div class="overlay hidden" id="victory-screen">
+  <div class="big-result">要塞擊破！</div>
+  <div class="final-score">得分 <b id="victory-score">0</b> · 進入下一輪，敵軍強化！</div>
+  <button class="btn" id="nextloop-btn">繼 續</button>
+</div>
+
+<div class="overlay hidden" id="stageclear-screen">
+  <div class="big-result" style="color:#8ef3ff;text-shadow:0 0 20px #29c7ff;">STAGE CLEAR</div>
+  <div class="final-score" id="stageclear-sub">前往下一關</div>
+</div>
+
+<div id="errlog"></div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
