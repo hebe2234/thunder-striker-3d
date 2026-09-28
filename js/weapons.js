@@ -1,43 +1,51 @@
 // 武器系統：6種主武器 + 3種飛彈 + 炸彈 + 技能樹
 import * as THREE from 'three';
 import { MB, glowSprite, PLAYER_GUN_X } from './models.js';
+import { t } from './i18n.js';
 
 export const WEAPON_INFO = {
-  vulcan:  { name: '火神炮 VULCAN', color: '#ff5e5e' },
-  laser:   { name: '雷射 LASER', color: '#29c7ff' },
-  plasma:  { name: '電漿 PLASMA', color: '#c07bff' },
-  railgun: { name: '軌道炮 RAILGUN', color: '#7dff9e' },
-  rockets: { name: '火箭彈幕 ROCKETS', color: '#ffb066' },
-  tesla:   { name: '特斯拉 TESLA', color: '#fff066' },
+  vulcan:  { name: t('weapon.vulcan'), color: '#ff5e5e' },
+  laser:   { name: t('weapon.laser'), color: '#29c7ff' },
+  plasma:  { name: t('weapon.plasma'), color: '#c07bff' },
+  railgun: { name: t('weapon.railgun'), color: '#7dff9e' },
+  rockets: { name: t('weapon.rockets'), color: '#ffb066' },
+  tesla:   { name: t('weapon.tesla'), color: '#fff066' },
 };
 export const MISSILE_INFO = {
-  homing:  { name: '追蹤飛彈 HOMING' },
-  napalm:  { name: '燃燒飛彈 NAPALM' },
-  cluster: { name: '分裂飛彈 CLUSTER' },
-  none:    { name: '無飛彈' },
+  homing:  { name: t('missile.homing') },
+  napalm:  { name: t('missile.napalm') },
+  cluster: { name: t('missile.cluster') },
+  none:    { name: t('missile.none') },
 };
 
 // ================= 技能樹 =================
 export const SKILL_DEFS = [
-  { id: 'w_railgun', kind: 'weapon', wid: 'railgun', icon: '🟢', name: '電磁軌道炮 RAILGUN', desc: '超重型貫穿彈，單發毀滅傷害，射速慢' },
-  { id: 'w_rockets', kind: 'weapon', wid: 'rockets', icon: '🟠', name: '火箭彈幕 ROCKETS', desc: '連射小型火箭，命中引發小範圍爆炸' },
-  { id: 'w_tesla', kind: 'weapon', wid: 'tesla', icon: '⚡', name: '特斯拉電弧 TESLA', desc: '發射電弧球，閃電鏈傳導多個敵人' },
-  { id: 'w_vulcan', kind: 'weapon', wid: 'vulcan', icon: '🔴', name: '火神散射炮 VULCAN', desc: '切換：扇形散射彈幕，雜魚殺手' },
-  { id: 'w_laser', kind: 'weapon', wid: 'laser', icon: '🔵', name: '雷射光束 LASER', desc: '切換：持續貫穿光束，BOSS 剋星' },
-  { id: 'w_plasma', kind: 'weapon', wid: 'plasma', icon: '🟣', name: '電漿爆裂彈 PLASMA', desc: '切換：重型電漿球＋範圍爆炸' },
-  { id: 'm_homing', kind: 'missile', mid: 'homing', icon: '🎯', name: '追蹤飛彈', desc: '自動鎖定敵機' },
-  { id: 'm_napalm', kind: 'missile', mid: 'napalm', icon: '🔥', name: '燃燒飛彈', desc: '地面持續燃燒傷害' },
-  { id: 'm_cluster', kind: 'missile', mid: 'cluster', icon: '💥', name: '分裂飛彈', desc: '升空後分裂為 3 枚追蹤彈' },
-  { id: 'u_level', kind: 'upgrade', max: 99, icon: '⬆️', name: '武器升級', desc: '主武器等級 +1（最高 8 級）' },
-  { id: 'u_dmg', kind: 'upgrade', max: 5, icon: '💢', name: '傷害強化', desc: '所有武器傷害 +20%' },
-  { id: 'u_rate', kind: 'upgrade', max: 5, icon: '🚀', name: '射速強化', desc: '射速 +12%' },
-  { id: 'u_crit', kind: 'upgrade', max: 3, icon: '🎯', name: '爆擊晶片', desc: '爆擊率 +10%（2 倍傷害）' },
-  { id: 'u_shield', kind: 'upgrade', max: 3, icon: '🛡️', name: '能量護盾', desc: '獲得一層護盾，抵擋一次傷害' },
-  { id: 'u_wing', kind: 'upgrade', max: 2, icon: '🛩️', name: '僚機', desc: '召喚僚機協同攻擊' },
-  { id: 'u_magnet', kind: 'upgrade', max: 2, icon: '🧲', name: '磁吸裝置', desc: '道具吸引範圍大幅擴大' },
-  { id: 'u_bomb', kind: 'upgrade', max: 2, icon: '💣', name: '炸彈擴充', desc: '炸彈上限 +1 並補滿' },
-  { id: 'u_life', kind: 'upgrade', max: 99, icon: '❤️', name: '緊急維修', desc: '戰機 +1（最多 5 架）' },
+  { id: 'w_railgun', kind: 'weapon', wid: 'railgun', icon: '🟢', name: t('skill.w_railgun.name'), desc: t('skill.w_railgun.desc') },
+  { id: 'w_rockets', kind: 'weapon', wid: 'rockets', icon: '🟠', name: t('skill.w_rockets.name'), desc: t('skill.w_rockets.desc') },
+  { id: 'w_tesla', kind: 'weapon', wid: 'tesla', icon: '⚡', name: t('skill.w_tesla.name'), desc: t('skill.w_tesla.desc') },
+  { id: 'w_vulcan', kind: 'weapon', wid: 'vulcan', icon: '🔴', name: t('skill.w_vulcan.name'), desc: t('skill.w_vulcan.desc') },
+  { id: 'w_laser', kind: 'weapon', wid: 'laser', icon: '🔵', name: t('skill.w_laser.name'), desc: t('skill.w_laser.desc') },
+  { id: 'w_plasma', kind: 'weapon', wid: 'plasma', icon: '🟣', name: t('skill.w_plasma.name'), desc: t('skill.w_plasma.desc') },
+  { id: 'm_homing', kind: 'missile', mid: 'homing', icon: '🎯', name: t('skill.m_homing.name'), desc: t('skill.m_homing.desc') },
+  { id: 'm_napalm', kind: 'missile', mid: 'napalm', icon: '🔥', name: t('skill.m_napalm.name'), desc: t('skill.m_napalm.desc') },
+  { id: 'm_cluster', kind: 'missile', mid: 'cluster', icon: '💥', name: t('skill.m_cluster.name'), desc: t('skill.m_cluster.desc') },
+  { id: 'u_level', kind: 'upgrade', max: 99, icon: '⬆️', name: t('skill.u_level.name'), desc: t('skill.u_level.desc') },
+  { id: 'u_dmg', kind: 'upgrade', max: 5, icon: '💢', name: t('skill.u_dmg.name'), desc: t('skill.u_dmg.desc') },
+  { id: 'u_rate', kind: 'upgrade', max: 5, icon: '🚀', name: t('skill.u_rate.name'), desc: t('skill.u_rate.desc') },
+  { id: 'u_crit', kind: 'upgrade', max: 3, icon: '🎯', name: t('skill.u_crit.name'), desc: t('skill.u_crit.desc') },
+  { id: 'u_shield', kind: 'upgrade', max: 3, icon: '🛡️', name: t('skill.u_shield.name'), desc: t('skill.u_shield.desc') },
+  { id: 'u_wing', kind: 'upgrade', max: 2, icon: '🛩️', name: t('skill.u_wing.name'), desc: t('skill.u_wing.desc') },
+  { id: 'u_magnet', kind: 'upgrade', max: 2, icon: '🧲', name: t('skill.u_magnet.name'), desc: t('skill.u_magnet.desc') },
+  { id: 'u_bomb', kind: 'upgrade', max: 2, icon: '💣', name: t('skill.u_bomb.name'), desc: t('skill.u_bomb.desc') },
+  { id: 'u_life', kind: 'upgrade', max: 99, icon: '❤️', name: t('skill.u_life.name'), desc: t('skill.u_life.desc') },
 ];
+
+// 切換語言時重填所有顯示文字（UI 由此重渲染）
+export function localizeWeapons() {
+  for (const [id, w] of Object.entries(WEAPON_INFO)) w.name = t('weapon.' + id);
+  for (const [id, m] of Object.entries(MISSILE_INFO)) m.name = t('missile.' + id);
+  for (const d of SKILL_DEFS) { d.name = t('skill.' + d.id + '.name'); d.desc = t('skill.' + d.id + '.desc'); }
+}
 
 export function buildChoices(game) {
   const w = game.weapons;
@@ -56,7 +64,7 @@ export function buildChoices(game) {
   }
   const picks = [];
   while (picks.length < 3 && pool.length) picks.push(pool.splice((Math.random() * pool.length) | 0, 1)[0]);
-  while (picks.length < 3) picks.push({ id: 'u_score', kind: 'bonus', icon: '⭐', name: '戰利品', desc: '得分 +5000' });
+  while (picks.length < 3) picks.push({ id: 'u_score', kind: 'bonus', icon: '⭐', name: t('skill.u_score.name'), desc: t('skill.u_score.desc') });
   return picks;
 }
 

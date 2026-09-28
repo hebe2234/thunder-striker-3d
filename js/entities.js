@@ -218,9 +218,9 @@ export class Midboss {
     this.mesh = built.group; this.core = built.core;
     game.scene.add(this.mesh);
     this.shadow = blobShadow(9); game.scene.add(this.shadow);
-    game.ui.setBoss(tier === 1 ? '鐵鷲 · IRON VULTURE' : '鐵鷲改 · IRON VULTURE KAI', 1);
+    game.ui.setBoss(tier === 1 ? 'boss.iron_vulture' : 'boss.iron_vulture_kai', 1);
     game.audio.warning();
-    game.ui.banner('⚠ 警 告 ⚠', '大型空中目標接近中');
+    game.ui.bannerK('boss.warn', 'boss.warn_sub');
   }
   update(dt) {
     const g = this.game, p = g.player;
@@ -309,9 +309,9 @@ export class FinalBoss {
     this.core = built.core; this.coreShell = built.coreShell;
     game.scene.add(this.mesh);
     this.shadow = blobShadow(16); game.scene.add(this.shadow);
-    game.ui.setBoss('暴風要塞 · STORM FORTRESS', 1);
+    game.ui.setBoss('boss.storm_fortress', 1);
     game.audio.warning();
-    game.ui.banner('⚠ 最終警告 ⚠', '暴風要塞出現 — 擊破核心！');
+    game.ui.bannerK('boss.final_warn', 'boss.final_sub');
     game.audio.setIntensity(2);
   }
   update(dt) {
@@ -323,7 +323,7 @@ export class FinalBoss {
     const newPhase = frac < 0.33 ? 3 : frac < 0.66 ? 2 : 1;
     if (newPhase !== this.phase) {
       this.phase = newPhase;
-      g.ui.banner(newPhase === 2 ? '第二階段' : '核心露出！', newPhase === 2 ? '飛彈莢艙全開' : '集中火力攻擊核心');
+      g.ui.bannerK(newPhase === 2 ? 'boss.phase2' : 'boss.phase3', newPhase === 2 ? 'boss.phase2_sub' : 'boss.phase3_sub');
       g.audio.warning(); g.shake.add(0.5);
       if (newPhase === 3) { this.core.visible = true; }
     }

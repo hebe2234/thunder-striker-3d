@@ -10,7 +10,7 @@ window.addEventListener('unhandledrejection', e => { errBox.textContent += `[rej
 const ui = new UI(null);
 const game = new Game(document.getElementById('stage'), ui);
 ui.game = game;
-ui.syncDifficulty(game.diffId);
+ui.applyLanguage(); // 依偵測到的語言渲染全部文字
 
 const params = new URLSearchParams(location.search);
 if (params.get('muted') === '1') { game.audio.init(); game.audio.toggleMute(); document.getElementById('mute-btn').textContent = '🔇'; }

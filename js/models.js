@@ -1,5 +1,6 @@
 // 程序化 3D 模型：玩家戰機 / 敵機 / 地面單位 / BOSS / 道具 / 地景
 import * as THREE from 'three';
+import { t } from './i18n.js';
 
 export function M(color, o = {}) {
   return new THREE.MeshStandardMaterial(Object.assign(
@@ -269,11 +270,21 @@ export function makeBoss() {
 
 // ================= 道具 =================
 const ITEM_STYLE = {
-  vulcan:  ['R', '#ff5e5e', '火神炮'], laser: ['B', '#29c7ff', '雷射'],
-  plasma:  ['P', '#c07bff', '電漿'], missile_h: ['M', '#7bff9e', '追蹤飛彈'],
-  missile_n: ['H', '#ffd75e', '燃燒飛彈'], power: ['Ⓟ', '#ffffff', '火力提升'],
-  bomb:    ['💣', '#ff9d2e', '炸彈'], medal: ['★', '#ffe97b', '勳章'], oneup: ['1UP', '#8effa8', '續命'],
+  vulcan:  ['R', '#ff5e5e', ''], laser: ['B', '#29c7ff', ''],
+  plasma:  ['P', '#c07bff', ''], missile_h: ['M', '#7bff9e', ''],
+  missile_n: ['H', '#ffd75e', ''], power: ['Ⓟ', '#ffffff', ''],
+  bomb:    ['💣', '#ff9d2e', ''], medal: ['★', '#ffe97b', ''], oneup: ['1UP', '#8effa8', ''],
 };
+const ITEM_LABEL_KEY = {
+  vulcan: 'item.vulcan', laser: 'item.laser', plasma: 'item.plasma',
+  missile_h: 'item.missile_h', missile_n: 'item.missile_n', power: 'item.power',
+  bomb: 'item.bomb', medal: 'item.medal', oneup: 'item.oneup',
+};
+// 切換語言時重填道具標籤（目前僅資料用，貼圖只畫字母）
+export function localizeModels() {
+  for (const [k, key] of Object.entries(ITEM_LABEL_KEY)) ITEM_STYLE[k][2] = t(key);
+}
+localizeModels();
 export function itemStyle(kind) { return ITEM_STYLE[kind] || ITEM_STYLE.medal; }
 export function makeItemSprite(kind) {
   const [letter, color] = itemStyle(kind);

@@ -5,16 +5,17 @@ import { WeaponSystem, WEAPON_INFO, SKILL_DEFS, buildChoices } from './weapons.j
 import { Enemy, Midboss, FinalBoss, Item, spawnEnemyHomingMissile, disposeGroup } from './entities.js';
 import { Particles, Rings, Shake, Booms } from './particles.js';
 import { makePlayer, makeDrone, groundTexture, onGroundTexture, makeGroundProp, makeCloud, glowSprite, blobShadow, MB } from './models.js';
+import { t } from './i18n.js';
 
 const V3 = THREE.Vector3;
 const clamp = THREE.MathUtils.clamp;
 
 // 難度設定：speed 影響遊戲速度（敵方移動/開火節奏、敵彈速度、地面捲動）
 export const DIFFICULTIES = {
-  easy:      { id: 'easy',      name: '簡單', speed: 0.88, hp: 0.6, fireRate: 0.55, playerDmg: 1.3, dmgTaken: 0.7, score: 0.8 },
-  normal:    { id: 'normal',    name: '普通', speed: 1.0,  hp: 1.0, fireRate: 1.0,  playerDmg: 1.0, dmgTaken: 1.0, score: 1.0 },
-  hard:      { id: 'hard',      name: '困難', speed: 1.12, hp: 1.5, fireRate: 1.4,  playerDmg: 0.9, dmgTaken: 1.3, score: 1.25 },
-  nightmare: { id: 'nightmare', name: '噩夢', speed: 1.25, hp: 2.2, fireRate: 1.85, playerDmg: 0.8, dmgTaken: 1.6, score: 1.5 },
+  easy:      { id: 'easy',      name: t('diff.easy'), speed: 0.88, hp: 0.6, fireRate: 0.55, playerDmg: 1.3, dmgTaken: 0.7, score: 0.8 },
+  normal:    { id: 'normal',    name: t('diff.normal'), speed: 1.0,  hp: 1.0, fireRate: 1.0,  playerDmg: 1.0, dmgTaken: 1.0, score: 1.0 },
+  hard:      { id: 'hard',      name: t('diff.hard'), speed: 1.12, hp: 1.5, fireRate: 1.4,  playerDmg: 0.9, dmgTaken: 1.3, score: 1.25 },
+  nightmare: { id: 'nightmare', name: t('diff.nightmare'), speed: 1.25, hp: 2.2, fireRate: 1.85, playerDmg: 0.8, dmgTaken: 1.6, score: 1.5 },
 };
 export const DIFF_IDS = ['easy', 'normal', 'hard', 'nightmare'];
 
@@ -251,7 +252,7 @@ export class Game {
   _beginStage() {
     this.waveT = 0;
     this.waves = this.stage.waves(this);
-    this.ui.banner(this.stage.bannerBig, this.stage.bannerSub);
+    this.ui.bannerK(this.stage.bannerBigK, this.stage.bannerSubK);
     this.audio.setIntensity(1);
   }
   _spawnPlayer(fresh) {
@@ -272,9 +273,9 @@ export class Game {
     if (this.choiceQueued) {
       // 有排隊的選擇：等 STAGE CLEAR 橫幅播完再開選擇，選完才進下一關
       this.choiceQueued = false;
-      this.ui.stageClear(this.stage.clearText, () => { this._pendingAdvance = advance; this.openChoice(); });
+      this.ui.stageClear(this.stage.clearK, () => { this._pendingAdvance = advance; this.openChoice(); });
     } else {
-      this.ui.stageClear(this.stage.clearText, advance);
+      this.ui.stageClear(this.stage.clearK, advance);
     }
   }
   // ---------- 技能樹 ----------
@@ -298,10 +299,10 @@ export class Game {
     this.skills[id] = (this.skills[id] || 0) + 1;
     if (def.kind === 'weapon') {
       w.setWeapon(def.wid);
-      this.ui.banner(WEAPON_INFO[def.wid].name, '武器切換！', 1.4);
+      this.ui.bannerK('weapon.' + def.wid, 'msg.weapon_switched', 1.4);
     } else if (def.kind === 'missile') {
       w.setMissile(def.mid);
-      this.ui.banner(def.name, def.desc, 1.4);
+      this.ui.bannerK('skill.' + def.id + '.name', 'skill.' + def.id + '.desc', 1.4);
     } else if (id === 'u_level') w.addLevel();
     else if (id === 'u_dmg') w.dmgMul *= 1.2;
     else if (id === 'u_rate') w.rateMul *= 1.12;
@@ -496,7 +497,7 @@ export class Game {
     this.rings.spawn(x, 1.4, z, 0xffffff, 3, 0.4);
     if (kind === 'bomb') { this.player.bombs = Math.min(this.player.maxBombs, this.player.bombs + 1); this.audio.pickup(); ui.setBombs(this.player.bombs, this.player.maxBombs); }
     else if (kind === 'medal') { this.addScore(Math.round(500 * (1 + Math.min(this.chain, 50) * 0.04)), x, z); this.audio.pickup(); }
-    else if (kind === 'oneup') { this.player.lives = Math.min(5, this.player.lives + 1); this.audio.oneUp(); ui.setLives(this.player.lives); ui.banner('1UP', '戰機增加！', 1.4); }
+    else if (kind === 'oneup') { this.player.lives = Math.min(5, this.player.lives + 1); this.audio.oneUp(); ui.setLives(this.player.lives); ui.bannerK('msg.oneup_big', 'msg.oneup_sub', 1.4); }
   }
 
   // ---------- 計分 / 連擊 ----------
@@ -911,9 +912,9 @@ function vee(g, kind, n, cx, z) { for (let i = 0; i < n; i++) { const k = i - (n
 
 const STAGES = [
   {
-    name: 'STAGE 1 · 黃昏都市', theme: 'city', sky: 0x241a38,
+    nameK: 'stage.1.name', name: '', theme: 'city', sky: 0x241a38,
     route: [7, 0.009, 0, 3, 0.023, 1.7], // 彎曲路線：[A1,f1,p1,A2,f2,p2]
-    bannerBig: 'STAGE 1', bannerSub: '黃昏都市 — 作戰開始', clearText: '黃昏都市制壓！',
+    bannerBigK: 'stage.1.big', bannerBig: '', bannerSubK: 'stage.1.sub', bannerSub: '', clearK: 'stage.1.clear', clearText: '',
     waves(g) {
       return [
         { t: 1.5, fn: () => line(g, 'scout', 5, -6, 3, -50) },
@@ -936,9 +937,9 @@ const STAGES = [
     },
   },
   {
-    name: 'STAGE 2 · 沙漠風暴', theme: 'desert', sky: 0x8fb8d8,
+    nameK: 'stage.2.name', name: '', theme: 'desert', sky: 0x8fb8d8,
     route: [10, 0.010, 0.5, 4, 0.023, 2.9],
-    bannerBig: 'STAGE 2', bannerSub: '沙漠風暴 — 敵軍增援', clearText: '沙漠空域確保！',
+    bannerBigK: 'stage.2.big', bannerBig: '', bannerSubK: 'stage.2.sub', bannerSub: '', clearK: 'stage.2.clear', clearText: '',
     waves(g) {
       return [
         { t: 1.5, fn: () => vee(g, 'ace', 4, 0, -52) },
@@ -961,9 +962,9 @@ const STAGES = [
     },
   },
   {
-    name: 'STAGE 3 · 午夜要塞', theme: 'night', sky: 0x04060f,
+    nameK: 'stage.3.name', name: '', theme: 'night', sky: 0x04060f,
     route: [6, 0.014, 2.0, 3.5, 0.031, 0.6],
-    bannerBig: 'FINAL STAGE', bannerSub: '午夜要塞 — 決戰', clearText: '',
+    bannerBigK: 'stage.3.big', bannerBig: '', bannerSubK: 'stage.3.sub', bannerSub: '', clearK: 'stage.3.clear', clearText: '',
     waves(g) {
       return [
         { t: 1.5, fn: () => vee(g, 'ace', 5, 0, -52) },
@@ -984,3 +985,13 @@ const STAGES = [
     },
   },
 ];
+
+// 切換語言時重填難度 / 關卡顯示文字（UI 由此重渲染）
+export function localizeGameData() {
+  for (const d of Object.values(DIFFICULTIES)) d.name = t('diff.' + d.id);
+  for (const s of STAGES) {
+    s.name = t(s.nameK);
+    s.bannerBig = t(s.bannerBigK); s.bannerSub = t(s.bannerSubK); s.clearText = t(s.clearK);
+  }
+}
+localizeGameData();
